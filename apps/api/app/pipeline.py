@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+from difflib import SequenceMatcher
 from dataclasses import dataclass
 
 from . import extractors, ingest
@@ -18,7 +19,7 @@ log = logging.getLogger(__name__)
 # fields whose local value is trusted over the LLM (checksum-validated)
 PROTECTED_SOURCES = {"mrz", "mrz+ocr"}
 # name fields re-read with the accurate model when they come from the fast pass without MRZ confirmation
-REFINE_FIELDS = ("surname", "given_names", "usage_name")
+REFINE_FIELDS = ("surname", "given_names", "usage_name", "address")
 IDENTITY_TYPES = {"id_card", "passport", "residence_permit", "driving_license"}
 
 
@@ -79,8 +80,9 @@ class Pipeline:
         for ln in targets:
             for img, y0, y1 in views:
                 if y0 <= ln.cy < y1:
-                    new = reread_line(eng, img, ln, y0)
-                    if new:
+                    new = reread_line(eng, img, ln, y0, lines)
+                    # guard against a crop that caught a neighbour: the re-read must stay close to the original
+                    if new and SequenceMatcher(None, _norm_cmp(ln.text), _norm_cmp(new.text)).ratio() >= 0.75:
                         repl[id(ln)] = new
                     break
         return [repl.get(id(ln), ln) for ln in lines]
@@ -88,7 +90,11 @@ class Pipeline:
     async def _refine_names(self, lines, views, ex: Extraction, forced):
         """Names have no checksum without an MRZ: re-read just those lines with the accurate model (~20 ms each)."""
         keys = [_norm_cmp(ex.fields[k]) for k in REFINE_FIELDS if ex.field_sources.get(k) == "ocr" and ex.fields.get(k)]
-        targets = [ln for ln in lines if any(k and k in _norm_cmp(ln.text) for k in keys)]
+        # a line is a target when it holds the value, or is one line of a multi-line value (address)
+        targets = [
+            ln for ln in lines
+            if (t := _norm_cmp(ln.text)) and any(k and (k in t or (len(t) >= 4 and t in k)) for k in keys)
+        ]
         if not targets:
             return None
         async with self.sem:
@@ -142,10 +148,11 @@ class Pipeline:
         if (from_fast and views and self.s.ocr_accurate_model != "none"
                 and self.s.ocr_accurate_model != self.s.ocr_fast_model and ex.document_type in IDENTITY_TYPES):
             refined = await self._refine_names(lines, views, ex, forced)
-            if refined and refined[1].rank() >= ex.rank():
-                ctx, ex, scores = refined
-                passes.append(f"{self.s.ocr_accurate_model}:names")
-            t = lap("ocr_names", t)
+            if refined:  # None when nothing needed a re-read (e.g. names confirmed by the MRZ)
+                if refined[1].rank() >= ex.rank():
+                    ctx, ex, scores = refined
+                    passes.append(f"{self.s.ocr_accurate_model}:names")
+                t = lap("ocr_names", t)
 
         result_type = ex.document_type
         fields = dict(ex.fields)

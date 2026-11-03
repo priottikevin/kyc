@@ -68,6 +68,34 @@ class Ctx:
 
         label/exclude are regexes applied on accent-stripped uppercase text.
         """
+        return self._locate(label, value_re, exclude, max_below)[0]
+
+    def value_block(self, label: str, exclude: str | None = None, stop: str | None = None, max_lines: int = 4) -> str | None:
+        """Multi-line value (addresses): first line as value_after, then left-aligned lines just below it."""
+        first, ln = self._locate(label, None, exclude)
+        if not first or ln is None:
+            return first
+        stop_re = re.compile(stop) if stop else None
+        parts, cur = [first], ln
+        for _ in range(max_lines - 1):
+            nxt = [
+                o for o in self.lines
+                if o is not cur and o.cy > cur.cy + 0.5 * cur.h and o.y0 - cur.y1 < 0.8 * cur.h
+                and abs(o.x0 - cur.x0) < 1.5 * cur.h
+            ]
+            if not nxt:
+                break
+            o = min(nxt, key=lambda o: o.y0)
+            t = clean_value(o.text)
+            if not t or (stop_re and stop_re.search(norm(t))):
+                break
+            parts.append(t)
+            cur = o
+        return ", ".join(parts)
+
+    def _locate(self, label: str, value_re: str | None = None, exclude: str | None = None,
+                max_below: float = 2.6) -> tuple[str | None, Line | None]:
+        """value_after + the box the value was read from (None when it shares the label's box)."""
         lab = re.compile(label)
         vre = re.compile(value_re) if value_re else None
         exc = re.compile(exclude) if exclude else None
@@ -96,13 +124,13 @@ class Ctx:
             rest = re.sub(r"^\s*\(\d+\)", "", rest)  # passport field numbers "(1)"
             r = ok(rest)
             if r and len(rest.strip(" :")) > 1:
-                return r
+                return r, None
             # 2) same row, to the right
             right = [o for o in self.lines if o is not ln and o.x0 >= ln.x1 - 5 and abs(o.cy - ln.cy) < 0.5 * max(ln.h, o.h)]
             for o in sorted(right, key=lambda o: o.x0)[:1]:
                 r = ok(o.text)
                 if r:
-                    return r
+                    return r, o
             # 3) below, horizontally overlapping, nearest first
             below = [
                 o for o in self.lines
@@ -114,5 +142,5 @@ class Ctx:
             for o in sorted(below, key=lambda o: (o.y0, abs(o.x0 - ln.x0))):
                 r = ok(o.text)
                 if r:
-                    return r
-        return None
+                    return r, o
+        return None, None

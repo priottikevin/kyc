@@ -116,11 +116,23 @@ def ocr_page(engine, img: np.ndarray) -> tuple[list[Line], np.ndarray]:
     return best[1], best[2]
 
 
-def reread_line(engine, img: np.ndarray, ln: Line, y_off: float = 0.0) -> Line | None:
-    """Recognition only (no detection) on one line's crop: a cheap way to get the accurate model's reading."""
+def reread_line(engine, img: np.ndarray, ln: Line, y_off: float = 0.0, others: list[Line] | None = None) -> Line | None:
+    """Recognition only (no detection, ~20 ms) on one line's crop with another model.
+
+    Tightly spaced lines (addresses) overlap their neighbours' boxes, so the crop stops halfway to the
+    centre of the lines just above / below.
+    """
     pad = 0.25 * ln.h
+    top, bottom = ln.y0 - pad, ln.y1 + pad
+    for o in others or []:
+        if o is ln or o.x1 < ln.x0 or o.x0 > ln.x1:
+            continue
+        if o.cy < ln.cy and abs(o.cy - ln.cy) > 0.3 * ln.h:
+            top = max(top, (o.cy + ln.cy) / 2)
+        elif o.cy > ln.cy and abs(o.cy - ln.cy) > 0.3 * ln.h:
+            bottom = min(bottom, (o.cy + ln.cy) / 2)
     h, w = img.shape[:2]
-    y0, y1 = max(0, int(ln.y0 - y_off - pad)), min(h, int(ln.y1 - y_off + pad))
+    y0, y1 = max(0, int(top - y_off)), min(h, int(bottom - y_off) + 1)
     x0, x1 = max(0, int(ln.x0 - pad)), min(w, int(ln.x1 + pad))
     if y1 - y0 < 4 or x1 - x0 < 4:
         return None

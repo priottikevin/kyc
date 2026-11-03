@@ -9,6 +9,10 @@ from .mrz import find_mrz
 # "Surname" is often misread ("Sumame", "Surmame")
 LABELS = r"(NOM|SURNAME|SU[RNM]{1,3}AME|PRENOM|GIVEN|SEXE|SEX|NATIONALIT|DATE|LIEU|PLACE|N[°O0] |DOCUMENT|EXPIR|AUTORIT|SIGNATURE|TAILLE|HEIGHT|ADRESSE|ADDRESS|DELIVR|ISSU|TYPE|CODE|PASSEPORT|PASSPORT|CARTE|REPUBLIQUE|NOM D'USAGE)"
 
+# Lines that end an address block. Anchored: "12 RUE DE LA REPUBLIQUE" is a valid address line.
+ADDR_STOP = (r"^(ADRESSE|ADDRESS|DATE|SIGNATURE|TA[I]?LLE|HEIGHT|NOM|PRENOM|SEXE|NATIONALIT|LIEU|N[°O0*'] ?DU|"
+             r"AUTORIT|REPUBLIQUE FRANCAISE|CARTE NATIONALE)|<<")
+
 REQUIRED = ["surname", "given_names", "birth_date", "document_number"]
 
 
@@ -55,7 +59,9 @@ def _viz(ctx: Ctx, ex: Extraction) -> None:
     expiry = v(r"EXPIR|VALABLE JUSQU|DATE OF EXPIRY|VALID UNTIL", DATE_VALUE)
     issue = v(r"DELIVR|DATE OF ISSUE|EMIS LE", DATE_VALUE)
     docnum = v(r"N[°O0]? ?DU DOCUMENT|DOCUMENT N|PASSPORT N|CARD N|N[°O] ?DE (CARTE|TITRE)", r"\b[A-Z0-9]{8,12}\b")
-    address = v(r"ADRESSE|ADDRESS|DOMICILE", exclude=LABELS)
+    # "ADRESSE / Address" is often misread ("ADRESSEI AddiresS"): drop English-label noise, read up to 4 lines
+    address = ctx.value_block(r"ADRESSE|ADDRESS|DOMICILE", exclude=ADDR_STOP + r"|^AD+I?R+E+S+\b|^[\d\s./\-]+$", stop=ADDR_STOP)
+    height = v(r"TA[I]?LLE|HEIGHT", r"\b[12][,.]\d{2}\s?[Mm]\b")
     authority = v(r"AUTORITE|AUTHORITY|DELIVRE PAR|PREFECTURE", exclude=r"^(DATE|SIGNATURE)")
 
     mrz_sn = ex.fields.get("surname") if ex.field_sources.get("surname") == "mrz" else None
@@ -87,6 +93,8 @@ def _viz(ctx: Ctx, ex: Extraction) -> None:
     if docnum:
         ex.set("document_number", docnum)
     ex.set("address", address)
+    if height:
+        ex.set("height", re.sub(r"\s*[Mm]$", " m", height.replace(".", ",")))
     ex.set("issuing_authority", authority)
     if "sex" not in ex.fields:
         s = v(r"\bSEXE\b|\bSEX\b", r"\b[MF]\b")

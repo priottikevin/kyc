@@ -48,6 +48,27 @@ def downscale(img: np.ndarray, max_side: int) -> np.ndarray:
     return cv2.resize(img, (int(w * s), int(h * s)), interpolation=cv2.INTER_AREA)
 
 
+def trim_margins(img: np.ndarray, thresh: int = 225, pad_ratio: float = 0.02) -> np.ndarray:
+    """Crop blank (near-white) margins, e.g. a card scanned in the corner of an A4 page.
+
+    Less pixels for the detector = faster OCR. Photos with a non-white background are left untouched.
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    ink = (gray < thresh).astype(np.uint8)
+    h, w = ink.shape
+    # ignore scanner specks / thin borders: keep rows/cols with a meaningful amount of ink
+    rows = np.where(ink.sum(axis=1) > max(3, 0.01 * w))[0]
+    cols = np.where(ink.sum(axis=0) > max(3, 0.01 * h))[0]
+    if rows.size == 0 or cols.size == 0:
+        return img
+    pad = int(pad_ratio * max(h, w))
+    y0, y1 = max(0, rows[0] - pad), min(h, rows[-1] + 1 + pad)
+    x0, x1 = max(0, cols[0] - pad), min(w, cols[-1] + 1 + pad)
+    if (y1 - y0) * (x1 - x0) > 0.8 * h * w:
+        return img
+    return img[y0:y1, x0:x1].copy()
+
+
 def load(data: bytes, max_pages: int, max_side: int) -> tuple[str, list[Page]]:
     kind = sniff(data)
     if kind == "heic":
@@ -58,7 +79,7 @@ def load(data: bytes, max_pages: int, max_side: int) -> tuple[str, list[Page]]:
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise UnsupportedFile("Image illisible")
-    return kind, [Page(image=downscale(img, max_side))]
+    return kind, [Page(image=trim_margins(downscale(img, max_side)))]
 
 
 def _load_pdf(data: bytes, max_pages: int, max_side: int) -> list[Page]:
@@ -78,7 +99,7 @@ def _load_pdf(data: bytes, max_pages: int, max_side: int) -> list[Page]:
             zoom = min(max_side / max(r.width, r.height), 4.0)
             pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), colorspace=fitz.csRGB, alpha=False)
             img = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, 3)
-            pages.append(Page(image=cv2.cvtColor(img, cv2.COLOR_RGB2BGR)))
+            pages.append(Page(image=trim_margins(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))))
     if not pages:
         raise UnsupportedFile("PDF vide")
     return pages
