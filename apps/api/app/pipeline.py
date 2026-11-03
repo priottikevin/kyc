@@ -10,13 +10,16 @@ from .classify import TYPES, classify
 from .config import Settings
 from .extractors import Ctx, Extraction
 from .llm import LlmClient, LlmError
-from .ocr import Line, OcrEngines, native_to_lines, ocr_page
+from .ocr import Line, OcrEngines, native_to_lines, ocr_page, reread_line
 from .textutils import entities, norm
 
 log = logging.getLogger(__name__)
 
 # fields whose local value is trusted over the LLM (checksum-validated)
 PROTECTED_SOURCES = {"mrz", "mrz+ocr"}
+# name fields re-read with the accurate model when they come from the fast pass without MRZ confirmation
+REFINE_FIELDS = ("surname", "given_names", "usage_name")
+IDENTITY_TYPES = {"id_card", "passport", "residence_permit", "driving_license"}
 
 
 @dataclass
@@ -46,24 +49,51 @@ class Pipeline:
 
     # ------------------------------------------------------------------ OCR
 
-    def _ocr_pages(self, pages: list[ingest.Page], size: str) -> list[Line]:
-        """OCR all pages; stack them vertically so layout helpers keep working across pages."""
+    def _ocr_pages(self, pages: list[ingest.Page], size: str) -> tuple[list[Line], list[tuple]]:
+        """OCR all pages; stack them vertically so layout helpers keep working across pages.
+
+        Also returns, per OCR'd page, (image the boxes refer to, y offset, y end) for targeted re-reads.
+        """
         out: list[Line] = []
+        views: list[tuple] = []
         y_off = 0.0
         for p in pages:
             if p.is_native:
                 lines = native_to_lines(p.native_lines)
             else:
-                lines = ocr_page(self.engines.get(size), p.image)
+                lines, img = ocr_page(self.engines.get(size), p.image)
+                views.append((img, y_off, y_off + img.shape[0]))
             for ln in lines:
                 out.append(Line(ln.text, ln.conf, ln.x0, ln.y0 + y_off, ln.x1, ln.y1 + y_off))
             if lines:
                 y_off = max(l.y1 for l in out) + 200
-        return out
+        return out, views
 
-    async def _ocr(self, pages, size) -> list[Line]:
+    async def _ocr(self, pages, size) -> tuple[list[Line], list[tuple]]:
         async with self.sem:
             return await asyncio.to_thread(self._ocr_pages, pages, size)
+
+    def _reread(self, lines: list[Line], views: list[tuple], targets: list[Line]) -> list[Line]:
+        eng = self.engines.get(self.s.ocr_accurate_model)
+        repl: dict[int, Line] = {}
+        for ln in targets:
+            for img, y0, y1 in views:
+                if y0 <= ln.cy < y1:
+                    new = reread_line(eng, img, ln, y0)
+                    if new:
+                        repl[id(ln)] = new
+                    break
+        return [repl.get(id(ln), ln) for ln in lines]
+
+    async def _refine_names(self, lines, views, ex: Extraction, forced):
+        """Names have no checksum without an MRZ: re-read just those lines with the accurate model (~20 ms each)."""
+        keys = [_norm_cmp(ex.fields[k]) for k in REFINE_FIELDS if ex.field_sources.get(k) == "ocr" and ex.fields.get(k)]
+        targets = [ln for ln in lines if any(k and k in _norm_cmp(ln.text) for k in keys)]
+        if not targets:
+            return None
+        async with self.sem:
+            new_lines = await asyncio.to_thread(self._reread, lines, views, targets)
+        return self._analyse(new_lines, forced)
 
     def _analyse(self, lines: list[Line], forced_type: str | None) -> tuple[Ctx, Extraction, dict]:
         ctx = Ctx(lines)
@@ -90,22 +120,32 @@ class Pipeline:
         forced = opts.document_type if opts.document_type in TYPES and opts.document_type != "unknown" else None
 
         passes = []
-        lines = await self._ocr(pages, self.s.ocr_fast_model)
+        lines, views = await self._ocr(pages, self.s.ocr_fast_model)
         passes.append("native" if not has_images else self.s.ocr_fast_model)
         ctx, ex, scores = self._analyse(lines, forced)
         t = lap("ocr_fast", t)
+        from_fast = True
 
         llm_mode = opts.llm or self.s.llm_mode
         llm_ready = self.llm is not None and llm_mode != "off"
         # Second, more accurate OCR pass when rules are not satisfied (skip if the LLM will look at the image anyway)
         if (not ex.complete and has_images and self.s.ocr_accurate_model != "none"
                 and not (ex.llm_preferred and llm_ready)):
-            lines2 = await self._ocr(pages, self.s.ocr_accurate_model)
+            lines2, views2 = await self._ocr(pages, self.s.ocr_accurate_model)
             ctx2, ex2, scores2 = self._analyse(lines2, forced)
             passes.append(self.s.ocr_accurate_model)
             if ex2.rank() > ex.rank():
                 ctx, ex, scores = ctx2, ex2, scores2
+                lines, views, from_fast = lines2, views2, False
             t = lap("ocr_accurate", t)
+
+        if (from_fast and views and self.s.ocr_accurate_model != "none"
+                and self.s.ocr_accurate_model != self.s.ocr_fast_model and ex.document_type in IDENTITY_TYPES):
+            refined = await self._refine_names(lines, views, ex, forced)
+            if refined and refined[1].rank() >= ex.rank():
+                ctx, ex, scores = refined
+                passes.append(f"{self.s.ocr_accurate_model}:names")
+            t = lap("ocr_names", t)
 
         result_type = ex.document_type
         fields = dict(ex.fields)

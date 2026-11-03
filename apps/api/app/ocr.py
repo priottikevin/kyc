@@ -76,11 +76,12 @@ class OcrEngines:
 
         cv2.putText(img, "WARMUP 123", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
         for s in sizes:
-            self.get(s)(img)
+            self.get(s)(img, use_det=True, use_cls=False, use_rec=True)
+            self.get(s)(img, use_det=False, use_cls=False, use_rec=True)  # targeted re-reads path
 
 
 def run_ocr(engine, img: np.ndarray) -> list[Line]:
-    res = engine(img)
+    res = engine(img, use_det=True, use_cls=False, use_rec=True)
     if res.txts is None or res.boxes is None:
         return []
     out = []
@@ -92,22 +93,41 @@ def run_ocr(engine, img: np.ndarray) -> list[Line]:
     return out
 
 
-def ocr_page(engine, img: np.ndarray) -> list[Line]:
-    """OCR with a cheap whole-page orientation check (photos taken sideways / upside down)."""
+def ocr_page(engine, img: np.ndarray) -> tuple[list[Line], np.ndarray]:
+    """OCR with a cheap whole-page orientation check (photos taken sideways / upside down).
+
+    Returns the lines and the image they refer to (rotated if needed).
+    """
     import cv2
 
     lines = run_ocr(engine, img)
     vertical = sum(1 for l in lines if l.h > 1.5 * l.w and len(l.text) > 2)
     low = _score(lines)
     if lines and vertical <= len(lines) * 0.4 and np.mean([l.conf for l in lines]) > 0.8:
-        return lines
+        return lines, img
     # Try alternatives only when the first pass looks wrong
-    candidates = [(low, lines)]
+    candidates = [(low, lines, img)]
     rots = [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE] if vertical > len(lines) * 0.4 else [cv2.ROTATE_180]
     for r in rots:
-        alt = run_ocr(engine, cv2.rotate(img, r))
-        candidates.append((_score(alt), alt))
-    return max(candidates, key=lambda c: c[0])[1]
+        rimg = cv2.rotate(img, r)
+        alt = run_ocr(engine, rimg)
+        candidates.append((_score(alt), alt, rimg))
+    best = max(candidates, key=lambda c: c[0])
+    return best[1], best[2]
+
+
+def reread_line(engine, img: np.ndarray, ln: Line, y_off: float = 0.0) -> Line | None:
+    """Recognition only (no detection) on one line's crop: a cheap way to get the accurate model's reading."""
+    pad = 0.25 * ln.h
+    h, w = img.shape[:2]
+    y0, y1 = max(0, int(ln.y0 - y_off - pad)), min(h, int(ln.y1 - y_off + pad))
+    x0, x1 = max(0, int(ln.x0 - pad)), min(w, int(ln.x1 + pad))
+    if y1 - y0 < 4 or x1 - x0 < 4:
+        return None
+    res = engine(img[y0:y1, x0:x1], use_det=False, use_cls=False, use_rec=True)
+    if not res.txts or not res.txts[0].strip():
+        return None
+    return Line(res.txts[0].strip(), float(res.scores[0]), ln.x0, ln.y0, ln.x1, ln.y1)
 
 
 def _score(lines: list[Line]) -> float:

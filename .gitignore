@@ -5,3 +5,6 @@ __pycache__/
 .ruff_cache/
 .env
 *.log
+
+# Real identity documents used for local tests - never commit
+CNI_*.jpg

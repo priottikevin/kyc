@@ -37,6 +37,10 @@ def clean_value(s: str) -> str:
 
 DATE_NUM = re.compile(r"\b(\d{1,2})\s*[./\- ]\s*(\d{1,2})\s*[./\- ]\s*(\d{4}|\d{2})\b")
 DATE_TXT = re.compile(r"\b(\d{1,2})\s*([A-Za-zÀ-ÿ]{3,9})\.?\s*(\d{4})\b")
+# OCR often drops separators on ID cards: "12091980", "28 072032"
+DATE_LOOSE = re.compile(r"(?<!\d)(\d{2})\s?[./\-]?\s?(\d{2})\s?[./\-]?\s?(\d{4})(?!\d)")
+# regex for a label-bound date value (used to skip label noise such as "7 Date Ofbith")
+DATE_VALUE = r"(?<!\d)\d{1,2}\s?[./\- ]?\s?(?:\d{1,2}|[A-Za-zÀ-ÿ]{3,9}\.?)\s?[./\- ]?\s?(?:\d{4}|\d{2})(?!\d)"
 
 
 def _mk(d: int, m: int, y: int) -> str | None:
@@ -60,6 +64,9 @@ def parse_date(s: str) -> str | None:
         mon = MONTHS.get(norm(m.group(2)).rstrip("."))
         if mon:
             return _mk(int(m.group(1)), mon, int(m.group(3)))
+    m = DATE_LOOSE.search(s)
+    if m:
+        return _mk(int(m.group(1)), int(m.group(2)), int(m.group(3)))
     return None
 
 

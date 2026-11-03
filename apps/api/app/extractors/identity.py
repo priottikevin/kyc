@@ -2,11 +2,12 @@
 
 import re
 
-from ..textutils import norm, parse_date, strip_accents
+from ..textutils import DATE_VALUE, norm, parse_date, strip_accents
 from .base import Ctx, Extraction
 from .mrz import find_mrz
 
-LABELS = r"(NOM|SURNAME|PRENOM|GIVEN|SEXE|SEX|NATIONALIT|DATE|LIEU|PLACE|N[°O0] |DOCUMENT|EXPIR|AUTORIT|SIGNATURE|TAILLE|HEIGHT|ADRESSE|ADDRESS|DELIVR|ISSU|TYPE|CODE|PASSEPORT|PASSPORT|CARTE|REPUBLIQUE|NOM D'USAGE)"
+# "Surname" is often misread ("Sumame", "Surmame")
+LABELS = r"(NOM|SURNAME|SU[RNM]{1,3}AME|PRENOM|GIVEN|SEXE|SEX|NATIONALIT|DATE|LIEU|PLACE|N[°O0] |DOCUMENT|EXPIR|AUTORIT|SIGNATURE|TAILLE|HEIGHT|ADRESSE|ADDRESS|DELIVR|ISSU|TYPE|CODE|PASSEPORT|PASSPORT|CARTE|REPUBLIQUE|NOM D'USAGE)"
 
 REQUIRED = ["surname", "given_names", "birth_date", "document_number"]
 
@@ -44,13 +45,15 @@ def extract(ctx: Ctx, doc_type: str) -> Extraction:
 def _viz(ctx: Ctx, ex: Extraction) -> None:
     """Visual inspection zone. Prefer VIZ spelling (accents, hyphens) when it matches the MRZ."""
     v = ctx.value_after
-    surname = v(r"\bNOM\b(?! D'USAGE)|SURNAME", r"[A-ZÀ-Ÿa-zà-ÿ][A-ZÀ-Ÿa-zà-ÿ' \-]+", exclude=LABELS)
+    # "NOM / Surname" may come out glued or garbled: "NOMI Sumame", "NOMISumame"
+    surname = v(r"\bNOM\b(?! D'USAGE)|^NOM(?!S\b)(?! D'USAGE)|SURNAME|SU[RNM]{1,3}AME",
+                r"[A-ZÀ-Ÿa-zà-ÿ][A-ZÀ-Ÿa-zà-ÿ' \-]+", exclude=LABELS)
     usage = v(r"NOM D'USAGE|ALTERNATIVE NAME|EPOUSE|EP\.", r"[A-ZÀ-Ÿa-zà-ÿ][A-ZÀ-Ÿa-zà-ÿ' \-]+", exclude=LABELS)
     given = v(r"PRENOM|GIVEN NAME", r"[A-ZÀ-Ÿa-zà-ÿ][A-ZÀ-Ÿa-zà-ÿ' ,\-]+", exclude=LABELS)
-    birth_place = v(r"LIEU DE NAISS|PLACE OF BIRTH", exclude=r"^(DATE|SEXE|SEX|NATIONAL)")
-    birth = v(r"DATE DE NAISS|DATE OF BIRTH|NE\(E\) LE|NE LE")
-    expiry = v(r"EXPIR|VALABLE JUSQU|DATE OF EXPIRY|VALID UNTIL")
-    issue = v(r"DELIVR|DATE OF ISSUE|EMIS LE")
+    birth_place = v(r"LIEU ?DE NAISS|PLACE OF BIRTH", exclude=r"^(DATE|SEXE|SEX|NATIONAL|\d)")
+    birth = v(r"DATE DE NAISS|DATE OF BIRTH|NE\(E\) LE|NE LE", DATE_VALUE)
+    expiry = v(r"EXPIR|VALABLE JUSQU|DATE OF EXPIRY|VALID UNTIL", DATE_VALUE)
+    issue = v(r"DELIVR|DATE OF ISSUE|EMIS LE", DATE_VALUE)
     docnum = v(r"N[°O0]? ?DU DOCUMENT|DOCUMENT N|PASSPORT N|CARD N|N[°O] ?DE (CARTE|TITRE)", r"\b[A-Z0-9]{8,12}\b")
     address = v(r"ADRESSE|ADDRESS|DOMICILE", exclude=LABELS)
     authority = v(r"AUTORITE|AUTHORITY|DELIVRE PAR|PREFECTURE", exclude=r"^(DATE|SIGNATURE)")

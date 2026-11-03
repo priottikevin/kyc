@@ -106,7 +106,9 @@ class Ctx:
             # 3) below, horizontally overlapping, nearest first
             below = [
                 o for o in self.lines
-                if o is not ln and o.y0 > ln.cy and o.y0 - ln.y1 < max_below * ln.h
+                # tilted photos: the value box can start above the label's center, compare centers instead
+                if o is not ln and o.cy > ln.cy + 0.25 * ln.h and o.y0 > ln.y0 + 0.25 * ln.h
+                and o.y0 - ln.y1 < max_below * ln.h
                 and o.x0 < ln.x1 and o.x1 > ln.x0 - ln.h
             ]
             for o in sorted(below, key=lambda o: (o.y0, abs(o.x0 - ln.x0))):
