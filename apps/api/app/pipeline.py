@@ -21,6 +21,8 @@ PROTECTED_SOURCES = {"mrz", "mrz+ocr"}
 # name fields re-read with the accurate model when they come from the fast pass without MRZ confirmation
 REFINE_FIELDS = ("surname", "given_names", "usage_name", "address")
 IDENTITY_TYPES = {"id_card", "passport", "residence_permit", "driving_license"}
+BUSINESS_TYPES = set(extractors.business.EXTRACTORS)
+DENSE_LINES = 70
 
 
 @dataclass
@@ -134,8 +136,10 @@ class Pipeline:
 
         llm_mode = opts.llm or self.s.llm_mode
         llm_ready = self.llm is not None and llm_mode != "off"
-        # Second, more accurate OCR pass when rules are not satisfied (skip if the LLM will look at the image anyway)
-        if (not ex.complete and has_images and self.s.ocr_accurate_model != "none"
+        # Second, more accurate OCR pass when rules are not satisfied (skip if the LLM will look at the image anyway).
+        # Not on dense text pages (invoices, reports...): several seconds for little gain, the fast model reads print well.
+        dense = len(lines) > DENSE_LINES or ex.document_type in BUSINESS_TYPES
+        if (not ex.complete and has_images and self.s.ocr_accurate_model != "none" and not dense
                 and not (ex.llm_preferred and llm_ready)):
             lines2, views2 = await self._ocr(pages, self.s.ocr_accurate_model)
             ctx2, ex2, scores2 = self._analyse(lines2, forced)

@@ -122,6 +122,62 @@ def format_phone(p: str) -> str:
     return re.sub(r"[\s.\-]+", " ", p).strip()
 
 
+# IBANs printed with any grouping ("FR76 17959 00036 5130202130195"): validated by the mod-97 checksum
+IBAN_START = re.compile(r"\b([A-Z]{2})\s?(\d{2})")
+IBAN_LEN = {"FR": 27, "MC": 27, "DE": 22, "BE": 16, "ES": 24, "IT": 27, "LU": 20, "NL": 18, "CH": 21, "GB": 22, "PT": 25, "IE": 22}
+
+
+def find_ibans(text: str) -> list[str]:
+    up = text.upper()
+    out = [i.replace(" ", "") for i in IBAN.findall(up) if iban_ok(i)]
+    for m in IBAN_START.finditer(up):
+        n = IBAN_LEN.get(m.group(1))
+        if not n:
+            continue
+        chars = re.findall(r"[A-Z0-9]", up[m.start():m.start() + n + 12])
+        if len(chars) >= n and iban_ok(cand := "".join(chars[:n])):
+            out.append(cand)
+    return list(dict.fromkeys(out))
+
+
+BIC = re.compile(r"\b[A-Z]{4}(?:FR|MC|DE|BE|ES|IT|LU|NL|CH|GB)[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b")
+# 1 328,30 / 1.328,30 / 1328.30 / 1,417.20
+AMOUNT = r"(?<![\d.,])\d{1,3}(?:[ .,  ]?\d{3})*[.,]\d{2}(?![.,]?\d)"
+
+
+def parse_amount(s: str | None) -> float | None:
+    if not s:
+        return None
+    s = re.sub(r"[\s  ]", "", s)
+    if "," in s and "." in s:
+        s = s.replace("." if s.rfind(",") > s.rfind(".") else ",", "")
+    s = s.replace(",", ".")
+    if s.count(".") > 1:
+        head, _, tail = s.rpartition(".")
+        s = head.replace(".", "") + "." + tail
+    try:
+        return round(float(s), 2)
+    except ValueError:
+        return None
+
+
+def last_amount(s: str) -> float | None:
+    found = re.findall(AMOUNT, s)
+    return parse_amount(found[-1]) if found else None
+
+
+def digits_luhn(s: str | None, n: int) -> str | None:
+    """First run of n digits (spaces allowed) passing the Luhn check: SIREN (9) / SIRET (14)."""
+    if not s:
+        return None
+    for m in re.finditer(r"\d[\d ]{%d,%d}\d" % (n - 2, n + 4), s):
+        d = m.group(0).replace(" ", "")
+        for i in range(0, len(d) - n + 1):
+            if luhn_ok(d[i:i + n]):
+                return d[i:i + n]
+    return None
+
+
 def entities(text: str) -> dict:
     """Generic, validated entities found anywhere in the text."""
     up = text.upper()
@@ -135,7 +191,7 @@ def entities(text: str) -> dict:
     urls = [u for u in dict.fromkeys(URL.findall(text)) if "@" not in u]
     if urls:
         out["websites"] = urls
-    ibans = [i.replace(" ", "") for i in IBAN.findall(up) if iban_ok(i)]
+    ibans = find_ibans(text)
     if ibans:
         out["ibans"] = list(dict.fromkeys(ibans))
     sir = []

@@ -39,6 +39,11 @@ def looks_like_mrz(s: str) -> bool:
     c = clean_line(s)
     if len(c) < 28:
         return False
+    # real filler characters must be printed: spaces and "/" (turned into "<" by clean_line) don't count,
+    # otherwise bank statement rows or bilingual labels look like an MRZ
+    raw_fillers = sum(s.count(ch) for ch in "<«‹")
+    if raw_fillers < 2:
+        return False
     return c.count("<") >= 2 and sum(ch.isalnum() or ch == "<" for ch in s.replace(" ", "")) / max(len(s.replace(" ", "")), 1) > 0.9
 
 
@@ -228,6 +233,8 @@ def find_mrz(texts: list[str]) -> MrzResult | None:
                 if a.startswith("IDFRA"):
                     results.append(parse_fr_cni(a, b))
                 results.append(parse_td2(a, b))
+    # an MRZ with (almost) no valid check digit is noise, not a damaged MRZ
+    results = [r for r in results if r.valid or r.score >= 2]
     if not results:
         return None
     return max(results, key=lambda r: (r.valid, r.score, len(r.fields)))

@@ -19,7 +19,25 @@
     insurer: "Assureur", policy_number: "N° de contrat", valid_from: "Valable du", valid_to: "Valable au",
     vehicle_make: "Marque véhicule", vehicle_model: "Modèle véhicule", job_title: "Fonction", company: "Société",
     emails: "E-mails", phones: "Téléphones", websites: "Sites web", siren_siret: "SIREN / SIRET",
+    height: "Taille", holder_status: "Qualité du titulaire", tax_regional: "Taxe régionale (€)", tax_total: "Taxe totale (€)",
+    // Kbis
+    company_name: "Dénomination", siren: "SIREN", rcs_city: "RCS", registration_date: "Date d'immatriculation",
+    legal_form: "Forme juridique", share_capital: "Capital social", euid: "EUID", head_office_address: "Siège",
+    activity: "Activité", activity_start_date: "Début d'activité", management_number: "N° de gestion",
+    extract_date: "Extrait à jour au", legal_representatives: "Dirigeants",
+    // invoice / bank
+    invoice_number: "N° de facture", invoice_date: "Date de facture", due_date: "Échéance", supplier_name: "Fournisseur",
+    supplier_siret: "SIRET fournisseur", vat_number: "N° TVA", total_excl_tax: "Total HT", total_vat: "TVA",
+    total_incl_tax: "Total TTC", iban: "IBAN", bic: "BIC", bank_name: "Banque", statement_period: "Période",
+    statement_date: "Date du relevé", account_holder: "Titulaire du compte", closing_balance: "Nouveau solde",
+    // claims
+    report_number: "N° de rapport", report_date: "Date du rapport", claim_number: "N° de sinistre", claim_date: "Date du sinistre",
+    expert_name: "Expert", conclusion: "Conclusion", repairer_invoice_number: "N° facture réparateur",
+    order_number: "N° d'OR", opened_date: "Ouvert le", work_type: "Type de travaux", customer_name: "Client",
+    work_description: "Travaux", contract_number: "N° de contrat", subject: "Objet", insurer_reference: "Référence assureur",
+    liability: "Responsabilité",
   };
+  const AMOUNTS = /^(total_|closing_balance)/;
 
   const getKey = () => { try { return localStorage.getItem(KEY) || ""; } catch { return ""; } };
   const setKey = (v) => { try { localStorage.setItem(KEY, v); } catch {} };
@@ -118,7 +136,10 @@
       const tr = document.createElement("tr");
       const td1 = document.createElement("td"); td1.textContent = LABELS[k] || k;
       const td2 = document.createElement("td"); td2.className = "val copyable"; td2.title = "Cliquer pour copier";
-      const text = Array.isArray(v) ? v.join(", ") : String(v);
+      const fmt = (x) => (x && typeof x === "object") ? Object.values(x).join(" : ") : String(x);
+      const text = Array.isArray(v) ? v.map(fmt).join(", ")
+        : (typeof v === "number" && AMOUNTS.test(k)) ? v.toLocaleString("fr-FR", { minimumFractionDigits: 2 }) + " €"
+        : fmt(v);
       td2.textContent = text;
       td2.onclick = () => navigator.clipboard?.writeText(text);
       const src = r.field_sources[k];

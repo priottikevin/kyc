@@ -12,6 +12,7 @@ CODES = {
     "C.1": "holder_name",
     "C.3": "holder_address",
     "C.4.1": "co_owner",
+    "C.4a": "holder_status",
     "D.1": "make",
     "D.2": "type_variant",
     "D.2.1": "national_type_code",
@@ -66,6 +67,7 @@ def extract(ctx: Ctx, doc_type: str) -> Extraction:
     found: dict[str, str] = {}
     val_x: dict[str, float] = {}  # x of the value column, to attach continuation lines
     val_row: dict[str, int] = {}
+    code_row: dict[str, int] = {}  # row of a code printed alone (value on the next row, e.g. C.3 address)
     for ri, row in enumerate(ctx.rows):
         current: str | None = None
         for ln in row:
@@ -74,6 +76,8 @@ def extract(ctx: Ctx, doc_type: str) -> Extraction:
             if m:
                 current = _canon(m.group(1))
                 found.setdefault(current, "")
+                if len(row) == 1:
+                    code_row[current] = ri
                 continue
             m = CODE_RE.match(t)
             if m and m.group(2):
@@ -85,6 +89,10 @@ def extract(ctx: Ctx, doc_type: str) -> Extraction:
             if current is None:
                 # no code yet on this row: continuation of a multi-line holder name / address?
                 for k in ("C.3", "C.1"):
+                    if not found.get(k) and code_row.get(k) == ri - 1:
+                        found[k] = t
+                        val_x[k], val_row[k] = ln.x0, ri
+                        break
                     if k in val_x and ri - val_row[k] == 1 and abs(ln.x0 - val_x[k]) < 3 * ln.h:
                         found[k] += ", " + t
                         val_row[k] = ri
@@ -111,7 +119,11 @@ def extract(ctx: Ctx, doc_type: str) -> Extraction:
             ex.set(key, code_f)
             if code_f in FUELS:
                 ex.set("fuel_label", FUELS[code_f])
-        elif key.endswith(("_kg", "_cm3", "_kw", "_cv", "seats", "_g_km", "_db", "_rpm")):
+        elif key == "holder_address":
+            # postcodes: "9230O" -> "92300"
+            ex.set(key, re.sub(r"(?<![\w])[0-9OQ]{5}(?![\w])", lambda m: m.group(0).replace("O", "0").replace("Q", "0")
+                               if sum(c.isdigit() for c in m.group(0)) >= 3 else m.group(0), val))
+        elif key.endswith(("_kg", "_cm3", "_kw", "_cv", "seats", "_g_km", "_db", "_rpm")) or key.startswith("tax_"):
             m = re.search(r"\d+(?:[.,]\d+)?", val)
             ex.set(key, m.group(0).replace(",", ".") if m else None)
         else:
