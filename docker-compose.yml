@@ -1,0 +1,28 @@
+# Coolify: "Docker Compose" build pack, attach your domain to the `web` service only.
+# The API stays private on the compose network; nginx (web) proxies /api to it.
+services:
+  api:
+    build: ./apps/api
+    restart: unless-stopped
+    environment:
+      - API_KEYS=${API_KEYS:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLM_MODE=${LLM_MODE:-fallback}
+      - LLM_MODEL=${LLM_MODEL:-claude-haiku-5-5}
+      - LLM_EFFORT=${LLM_EFFORT:-low}
+      - OCR_CONCURRENCY=${OCR_CONCURRENCY:-2}
+      - OCR_FAST_MODEL=${OCR_FAST_MODEL:-tiny}
+      - OCR_ACCURATE_MODEL=${OCR_ACCURATE_MODEL:-small}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-15}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+    expose:
+      - "8000"
+
+  web:
+    build: ./apps/web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    expose:
+      - "80"

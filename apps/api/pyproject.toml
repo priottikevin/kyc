@@ -1,0 +1,12 @@
+[project]
+name = "kyc-api"
+version = "1.0.0"
+description = "Fast KYC document data extraction API (local OCR + rules, Claude fallback)"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning", "ignore::FutureWarning"]
+
+[tool.ruff]
+line-length = 140
