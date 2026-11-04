@@ -91,3 +91,31 @@ Article 1 - PORTEE JURIDIQUE DE L'ORDRE DE REPARATION
     assert ex.fields["invoice_date"] == "2026-05-22"
     assert (ex.fields["total_excl_tax"], ex.fields["total_vat"], ex.fields["total_incl_tax"]) == (1328.3, 265.66, 1593.96)
     assert ex.checks == {"siret_luhn": True, "totals_consistent": True, "iban": True}
+
+
+REPAIR_ORDER_ROWS = """
+ORDRE DE REPARATION
+N° OR BRIS DE GLACE 34061 Ouvert le 07/05/2026
+Immatriculation GJ-868-JC Marque TOYOTA
+Client
+Nom DUPONT Date de Rdv Heure
+Adresse Date d'entrée Date Début Travaux
+10 RUE DES LILAS
+77420 CHAMPS SUR MARNE Date fin travaux Date de Sortie
+Tel 01 23 45 67 89 Fax 01 98 76 54 32 Date d'expertise Expert
+Portable 06 12 34 56 78
+Mail client@exemple.fr
+Expert Assurance
+Nom Nom MAIF
+Adresse Adresse 200 AVENUE SALVADOR ALLENDE
+Tel Fax Tel 09 72 72 15 15 Fax
+"""
+
+
+def test_repair_order_customer_contact():
+    doc_type, ex = run(REPAIR_ORDER_ROWS)
+    assert doc_type == "repair_order"
+    assert ex.fields["customer_address"] == "10 RUE DES LILAS, 77420 CHAMPS SUR MARNE"
+    assert ex.fields["customer_phone"] == "01 23 45 67 89"
+    assert ex.fields["customer_mobile"] == "06 12 34 56 78"
+    assert ex.fields["customer_email"] == "client@exemple.fr"

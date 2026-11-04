@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-API_VERSION = "1.2.0"
+API_VERSION = "1.3.0"
 
 DocumentType = Literal[
     "id_card", "passport", "residence_permit", "driving_license", "vehicle_registration", "insurance_certificate",

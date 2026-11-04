@@ -7,7 +7,7 @@ box geometry. Each extractor keeps a short list of required fields; the LLM (whe
 import re
 
 from ..textutils import (
-    AMOUNT, BIC, DATE_VALUE, VIN, digits_luhn, find_ibans, find_plate, iban_ok, last_amount, norm, parse_amount,
+    AMOUNT, BIC, DATE_VALUE, EMAIL, VIN, digits_luhn, find_ibans, find_plate, format_phone, iban_ok, last_amount, norm, parse_amount,
     parse_date,
 )
 from .base import Ctx, Extraction
@@ -195,6 +195,23 @@ def expert_report(ctx: Ctx) -> Extraction:
 # ---------------------------------------------------------------- repair order
 
 
+def _customer_contact(ex: Extraction, text: str) -> None:
+    """Address, phones and email of the "Client" block; the labels share their rows with the appointment dates."""
+    block = _search(r"^CLIENT[ \t]*$(.*?)(?=^EXPERT\b|\Z)", text, flags=re.M | re.S)
+    if not block:
+        return
+    address = _search(r"^ADRESSE\b(.*?)(?=^TEL\b|\Z)", block, flags=re.M | re.S) or ""
+    rows = [re.sub(r"\s*\bDATE\b.*$", "", row).strip() for row in address.splitlines()]
+    ex.set("customer_address", ", ".join(row for row in rows if row) or None)
+    number = r"\s*:?\s*((?:\+33|0)[\d .\-]{8,16}\d)"
+    phone = _search(r"^TEL\b" + number, block, flags=re.M)
+    mobile = _search(r"^PORTABLE\b" + number, block, flags=re.M)
+    ex.set("customer_phone", format_phone(phone) if phone else None)
+    ex.set("customer_mobile", format_phone(mobile) if mobile else None)
+    email = EMAIL.search(block.lower())
+    ex.set("customer_email", email.group(0) if email else None)
+
+
 def repair_order(ctx: Ctx) -> Extraction:
     ex = Extraction("repair_order", required=["order_number", "plate"])
     t = ctx.ntext
@@ -206,6 +223,7 @@ def repair_order(ctx: Ctx) -> Extraction:
     ex.set("vehicle_make", v(r"^MARQUE$|\bMARQUE\b", exclude=r"^(MODELE|TYPE|IMMAT)"))
     ex.set("vehicle_model", v(r"^MODELE$|\bMODELE\b", exclude=r"^(IMMAT|N[°O]|DATE)"))
     ex.set("customer_name", v(r"^NOM$", exclude=r"^(NOM|ADRESSE|DATE)"))
+    _customer_contact(ex, t)
     ex.set("insurer", _insurer(t))
     ex.set("work_description", v(r"DESCRIPTION SOMMAIRE DES TRAVAUX|TRAVAUX A EFFECTUER|NATURE DES TRAVAUX"))
     return ex
