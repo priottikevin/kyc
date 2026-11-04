@@ -103,6 +103,11 @@ button.small { font-size: 12px; padding: 2px 8px; margin-left: 8px; }
 .src { font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; margin-left: 6px; white-space: nowrap; }
 .src.mrz { color: var(--ok); border-color: currentColor; }
 .src.llm { color: var(--accent); border-color: currentColor; }
+.conf { font: 11px var(--mono); border-radius: 5px; padding: 1px 6px; margin-left: 6px; white-space: nowrap; }
+.conf.verified, .conf.high { color: var(--ok); background: var(--ok-soft); }
+.conf.confirmed, .conf.llm { color: var(--accent); background: var(--accent-soft); }
+.conf.check, .conf.unknown { color: var(--warn); background: var(--warn-soft); }
+tr.doubt td.val { box-shadow: inset 3px 0 0 var(--warn); }
 .copyable { cursor: copy; }
 
 details { margin-top: 14px; }

@@ -9,3 +9,4 @@ pymupdf==2.1
 onnxruntime==1.31.1
 rapidocr==3.10.0
 anthropic==2.4.0
+httpx==0.28.1

@@ -113,7 +113,7 @@
 
     const e = r.engine;
     const meta = [file.name, e.input.toUpperCase(), `${e.pages} page${e.pages > 1 ? "s" : ""}`, "OCR " + e.ocr_passes.join(" → ")];
-    if (e.llm_used) meta.push("IA " + e.llm_model);
+    if (e.llm_used) meta.push(`IA ${e.llm_model} (${e.llm_kind === "lines" ? "relecture des lignes douteuses" : "document"})`);
     if (r.mrz) meta.push(`MRZ ${r.mrz.format} ${r.mrz.valid ? "✓" : "✗"}`);
     $("meta").textContent = meta.join(" · ");
 
@@ -142,6 +142,26 @@
         : fmt(v);
       td2.textContent = text;
       td2.onclick = () => navigator.clipboard?.writeText(text);
+      const c = (r.field_confidence || {})[k];
+      if (c) {
+        const b = document.createElement("span");
+        b.className = "conf " + c.level;
+        const pct = c.score == null ? "" : ` ${Math.floor(c.score * 100)} %`;
+        b.textContent = {
+          verified: "vérifié ✓", high: "fiable" + pct, confirmed: "confirmé IA" + pct,
+          llm: "lu par l'IA", check: "à vérifier" + pct, unknown: "à vérifier",
+        }[c.level] || c.level;
+        b.title = {
+          verified: "Prouvé par une somme de contrôle (MRZ, SIREN, IBAN, totaux)",
+          high: "Tous les caractères lus avec une confiance ≥ 97 %",
+          confirmed: "Un caractère était douteux ; l'IA a relu la ligne et lit la même chose",
+          llm: "Valeur corrigée ou ajoutée par l'IA",
+          check: "Au moins un caractère lu avec une confiance < 97 % (score = caractère le plus faible)",
+          unknown: "Valeur reformatée ou déduite : pas de score de lecture direct",
+        }[c.level] || "";
+        td2.append(b);
+        if (c.level === "check" || c.level === "unknown") tr.classList.add("doubt");
+      }
       const src = r.field_sources[k];
       if (src) {
         const s = document.createElement("span");

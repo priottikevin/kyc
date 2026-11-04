@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import secrets
 from contextlib import asynccontextmanager
@@ -25,8 +26,11 @@ async def lifespan(app: FastAPI):
     pipe = Pipeline(settings)
     pipe.warmup()  # load ONNX models before accepting traffic
     state["pipeline"] = pipe
+    warm = asyncio.create_task(pipe.llm.keep_warm()) if pipe.llm else None
     log.info("Ready (OCR %s/%s, LLM %s)", settings.ocr_fast_model, settings.ocr_accurate_model, settings.llm_mode)
     yield
+    if warm:
+        warm.cancel()
 
 
 app = FastAPI(title="KYC Extract API", version="1.0.0", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")

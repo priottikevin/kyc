@@ -17,6 +17,8 @@ class Line:
     y0: float
     x1: float
     y1: float
+    # recognition confidence of each character of `text` (None = exact text from a PDF text layer)
+    chars: list[float] | None = None
 
     @property
     def h(self) -> float:
@@ -68,7 +70,10 @@ class OcrEngines:
         if self._threads:
             params["EngineConfig.onnxruntime.intra_op_num_threads"] = self._threads
         log.info("Loading OCR engine %s", size)
-        return RapidOCR(params=params)
+        eng = RapidOCR(params=params)
+        # keep the raw per-character confidences; per-word box geometry is not needed (saves time)
+        eng.calc_word_boxes = lambda imgs, boxes, rec: rec.word_results
+        return eng
 
     def warmup(self, sizes: list[str]) -> None:
         img = np.full((120, 400, 3), 255, np.uint8)
@@ -76,20 +81,36 @@ class OcrEngines:
 
         cv2.putText(img, "WARMUP 123", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
         for s in sizes:
-            self.get(s)(img, use_det=True, use_cls=False, use_rec=True)
-            self.get(s)(img, use_det=False, use_cls=False, use_rec=True)  # targeted re-reads path
+            self.get(s)(img, **FLAGS)
+            self.get(s)(img, **REC_ONLY)  # targeted re-reads path
+
+
+# RapidOCR keeps these flags between calls: always pass them all explicitly
+FLAGS = dict(use_det=True, use_cls=False, use_rec=True, return_word_box=True, return_single_char_box=False)
+REC_ONLY = dict(FLAGS, use_det=False)
+
+
+def _chars(txt: str, info) -> tuple[str, list[float] | None]:
+    """Strip the text and keep the per-character confidences aligned with it."""
+    confs = list(getattr(info, "confs", None) or [])
+    if len(confs) != len(txt):
+        return txt.strip(), None
+    lead = len(txt) - len(txt.lstrip())
+    t = txt.strip()
+    return t, [float(c) for c in confs[lead:lead + len(t)]]
 
 
 def run_ocr(engine, img: np.ndarray) -> list[Line]:
-    res = engine(img, use_det=True, use_cls=False, use_rec=True)
+    res = engine(img, **FLAGS)
     if res.txts is None or res.boxes is None:
         return []
+    words = res.word_results if res.word_results and len(res.word_results) == len(res.txts) else [None] * len(res.txts)
     out = []
-    for box, txt, sc in zip(res.boxes, res.txts, res.scores):
+    for box, txt, sc, info in zip(res.boxes, res.txts, res.scores, words):
         b = np.asarray(box)
-        t = txt.strip()
+        t, ch = _chars(txt, info)
         if t:
-            out.append(Line(t, float(sc), float(b[:, 0].min()), float(b[:, 1].min()), float(b[:, 0].max()), float(b[:, 1].max())))
+            out.append(Line(t, float(sc), float(b[:, 0].min()), float(b[:, 1].min()), float(b[:, 0].max()), float(b[:, 1].max()), ch))
     return out
 
 
@@ -116,12 +137,9 @@ def ocr_page(engine, img: np.ndarray) -> tuple[list[Line], np.ndarray]:
     return best[1], best[2]
 
 
-def reread_line(engine, img: np.ndarray, ln: Line, y_off: float = 0.0, others: list[Line] | None = None) -> Line | None:
-    """Recognition only (no detection, ~20 ms) on one line's crop with another model.
-
-    Tightly spaced lines (addresses) overlap their neighbours' boxes, so the crop stops halfway to the
-    centre of the lines just above / below.
-    """
+def line_crop(img: np.ndarray, ln: Line, y_off: float = 0.0, others: list[Line] | None = None) -> np.ndarray | None:
+    """Crop of one line. Tightly spaced lines (addresses) overlap their neighbours' boxes, so the crop
+    stops halfway to the centre of the lines just above / below."""
     pad = 0.25 * ln.h
     top, bottom = ln.y0 - pad, ln.y1 + pad
     for o in others or []:
@@ -136,10 +154,19 @@ def reread_line(engine, img: np.ndarray, ln: Line, y_off: float = 0.0, others: l
     x0, x1 = max(0, int(ln.x0 - pad)), min(w, int(ln.x1 + pad))
     if y1 - y0 < 4 or x1 - x0 < 4:
         return None
-    res = engine(img[y0:y1, x0:x1], use_det=False, use_cls=False, use_rec=True)
+    return img[y0:y1, x0:x1]
+
+
+def reread_line(engine, img: np.ndarray, ln: Line, y_off: float = 0.0, others: list[Line] | None = None) -> Line | None:
+    """Recognition only (no detection, ~20 ms) on one line's crop with another model."""
+    crop = line_crop(img, ln, y_off, others)
+    if crop is None:
+        return None
+    res = engine(crop, **REC_ONLY)
     if not res.txts or not res.txts[0].strip():
         return None
-    return Line(res.txts[0].strip(), float(res.scores[0]), ln.x0, ln.y0, ln.x1, ln.y1)
+    t, ch = _chars(res.txts[0], res.word_results[0] if res.word_results else None)
+    return Line(t, float(res.scores[0]), ln.x0, ln.y0, ln.x1, ln.y1, ch)
 
 
 def _score(lines: list[Line]) -> float:

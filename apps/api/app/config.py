@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     llm_mode: Literal["fallback", "off", "always"] = "fallback"
     llm_model: str = "claude-haiku-5-5"
     llm_effort: Literal["low", "medium", "high"] = "low"
+    llm_thinking: bool = False  # off = faster; reading values needs no reasoning
+    llm_check_uncertain: bool = True  # send crops of low-confidence values to the LLM (fallback mode)
     llm_timeout_s: float = 30.0
     llm_image_max_side: int = 1568
     anthropic_api_key: str = ""
