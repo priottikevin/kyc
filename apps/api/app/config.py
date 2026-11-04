@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     llm_thinking: bool = False  # off = faster; reading values needs no reasoning
     llm_check_uncertain: bool = True  # send crops of low-confidence values to the LLM (fallback mode)
     llm_timeout_s: float = 30.0
+    # USD per million tokens, for engine.llm_cost_usd (Claude Haiku 5.5, prompts up to 100K tokens)
+    llm_price_input: float = 0.10
+    llm_price_output: float = 0.50
     llm_image_max_side: int = 1568
     anthropic_api_key: str = ""
 

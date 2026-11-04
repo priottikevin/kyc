@@ -10,6 +10,7 @@ services:
       - LLM_MODE=${LLM_MODE:-fallback}
       - LLM_MODEL=${LLM_MODEL:-claude-haiku-5-5}
       - LLM_EFFORT=${LLM_EFFORT:-low}
+      - LLM_CHECK_UNCERTAIN=${LLM_CHECK_UNCERTAIN:-true}
       - OCR_CONCURRENCY=${OCR_CONCURRENCY:-2}
       - OCR_FAST_MODEL=${OCR_FAST_MODEL:-tiny}
       - OCR_ACCURATE_MODEL=${OCR_ACCURATE_MODEL:-small}

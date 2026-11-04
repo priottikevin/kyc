@@ -14,6 +14,7 @@ from .classify import TYPES
 from .config import get_settings
 from .ingest import UnsupportedFile
 from .pipeline import Options, Pipeline
+from .schemas import API_VERSION, ErrorResponse, ExtractResponse, Health
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("kyc")
@@ -33,7 +34,23 @@ async def lifespan(app: FastAPI):
         warm.cancel()
 
 
-app = FastAPI(title="KYC Extract API", version="1.0.0", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
+DESCRIPTION = """Extraction de données de documents (identité, véhicule, assurance, entreprise, factures, sinistres).
+
+OCR local d'abord ; Claude n'est appelé que pour relire les valeurs douteuses ou les documents non compris.
+Authentification : header `X-API-Key`. Aucun fichier n'est conservé.
+
+Pour décider automatiquement : accepter si `status` = `verified`, ou `complete` sans champ de
+`field_confidence` au niveau `check`/`unknown` ; sinon faire vérifier les champs signalés."""
+
+ERRORS = {
+    401: {"model": ErrorResponse, "description": "Clé API invalide ou manquante"},
+    413: {"model": ErrorResponse, "description": "Fichier trop volumineux"},
+    415: {"model": ErrorResponse, "description": "Format non supporté (HEIC, PDF chiffré...)"},
+    422: {"description": "Paramètre invalide"},
+}
+
+app = FastAPI(title="KYC Extract API", version=API_VERSION, description=DESCRIPTION, lifespan=lifespan,
+              docs_url="/api/docs", redoc_url="/api/redoc", openapi_url="/api/openapi.json")
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_list, allow_methods=["GET", "POST"], allow_headers=["*"])
 
@@ -46,7 +63,7 @@ def require_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
         raise HTTPException(401, "Clé API invalide ou manquante (header X-API-Key)")
 
 
-@app.get("/api/health")
+@app.get("/api/health", response_model=Health)
 async def health():
     pipe = state.get("pipeline")
     return {
@@ -57,17 +74,18 @@ async def health():
     }
 
 
-@app.get("/api/document-types")
+@app.get("/api/document-types", response_model=dict[str, str], summary="Types reconnus (clé -> libellé)")
 async def document_types():
     return TYPES
 
 
-@app.post("/api/extract", dependencies=[Depends(require_key)])
+@app.post("/api/extract", dependencies=[Depends(require_key)], response_model=ExtractResponse,
+          responses=ERRORS, summary="Extraire les données d'un document")
 async def extract(
     file: Annotated[UploadFile, File(description="PDF ou image (JPEG, PNG, WEBP, TIFF)")],
-    document_type: Annotated[str | None, Form(description="Forcer le type (sinon détection auto)")] = None,
-    llm: Annotated[str | None, Form(description="off | fallback | always (défaut serveur)")] = None,
-    include_text: Annotated[bool, Form()] = False,
+    document_type: Annotated[str | None, Form(description="Forcer le type (clé de /api/document-types), sinon détection auto")] = None,
+    llm: Annotated[str | None, Form(description="off = 100 % local ; fallback (défaut) = LLM seulement si nécessaire ; always")] = None,
+    include_text: Annotated[bool, Form(description="Renvoyer le texte OCR brut dans `text`")] = False,
 ):
     max_bytes = settings.max_upload_mb * 1024 * 1024
     data = await file.read(max_bytes + 1)

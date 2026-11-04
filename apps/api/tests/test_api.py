@@ -33,3 +33,19 @@ def test_api_key(monkeypatch):
         assert c.post("/api/extract", files=f, data={"llm": "off"}).status_code == 401
         assert c.post("/api/extract", files=f, data={"llm": "off"}, headers={"X-API-Key": "nope"}).status_code == 401
         assert c.post("/api/extract", files=f, data={"llm": "off"}, headers={"X-API-Key": "secret2"}).status_code == 200
+
+
+def test_contract():
+    from app.schemas import API_VERSION
+
+    with client() as c:
+        spec = c.get("/api/openapi.json").json()
+        assert spec["info"]["version"] == API_VERSION
+        ok = spec["paths"]["/api/extract"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+        assert ok["$ref"].endswith("/ExtractResponse")
+        props = spec["components"]["schemas"]["ExtractResponse"]["properties"]
+        assert {"status", "fields", "field_confidence", "field_sources", "engine"} <= set(props)
+        body = c.post("/api/extract", files={"file": ("cni.jpg", synth.id_card_2021(), "image/jpeg")}, data={"llm": "off"}).json()
+        assert body["api_version"] == API_VERSION
+        assert body["field_confidence"]["document_number"]["level"] == "verified"
+        assert c.get("/api/health").json()["api_version"] == API_VERSION

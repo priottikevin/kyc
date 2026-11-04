@@ -310,6 +310,8 @@ class Pipeline:
                 "llm_kind": llm_kind,
                 "llm_model": self.s.llm_model if llm_used else None,
                 "llm_usage": llm_usage,
+                "llm_cost_usd": round((llm_usage["input_tokens"] * self.s.llm_price_input
+                                       + llm_usage["output_tokens"] * self.s.llm_price_output) / 1e6, 6) if llm_usage else None,
                 "classification_scores": {k: v for k, v in scores.items() if v},
             },
             "timings_ms": timings,
