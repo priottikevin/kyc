@@ -121,6 +121,16 @@
           },
           "422": {
             "description": "Paramètre invalide"
+          },
+          "503": {
+            "description": "Vérification de la clé momentanément impossible, réessayer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }

@@ -4,3 +4,8 @@ services:
   web:
     ports:
       - "8080:80"
+
+# The shared Coolify network only exists on the server
+networks:
+  coolify:
+    external: false

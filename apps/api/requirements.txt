@@ -10,3 +10,5 @@ onnxruntime==1.31.1
 rapidocr==3.10.0
 anthropic==2.4.0
 httpx==0.28.1
+psycopg[binary]==3.3.8
+psycopg-pool==3.3.3

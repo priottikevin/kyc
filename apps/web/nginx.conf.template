@@ -23,6 +23,15 @@ server {
         proxy_send_timeout 90s;
     }
 
+    # add_header here replaces the server-level headers, so they are repeated
+    location = /admin {
+        try_files /admin.html =404;
+        add_header Cache-Control "no-store";
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy no-referrer always;
+        add_header X-Frame-Options DENY always;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-cache";

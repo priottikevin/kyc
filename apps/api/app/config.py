@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     # Security
     api_keys: str = ""  # comma-separated; empty = no auth
     cors_origins: str = "*"
+    database_url: str = ""  # PostgreSQL: clients, API keys, usage. Empty = API_KEYS only, no admin data
+    admin_password: str = ""  # empty = /admin login disabled
 
     # Upload limits
     max_upload_mb: int = 15

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>KYC Admin</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232b59c3'/%3E%3Crect x='7' y='9' width='18' height='14' rx='2' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='M11 19h6M11 15h10' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="wrap admin">
+    <header class="top">
+      <h1>KYC Admin</h1>
+      <button id="logout" class="ghost" type="button" hidden>Se déconnecter</button>
+    </header>
+
+    <p id="error" class="admin-error" role="alert" hidden></p>
+
+    <form id="loginForm" class="admin-card admin-login" hidden>
+      <label for="password">Mot de passe administrateur</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button type="submit">Se connecter</button>
+    </form>
+
+    <div id="app" hidden>
+      <section class="admin-card">
+        <h2>Clients</h2>
+        <div class="admin-scroll">
+          <table>
+            <thead>
+              <tr><th>Entreprise</th><th>Contact</th><th>État</th><th class="num">Clés actives</th><th class="num">Appels du mois</th><th class="num">Réussis</th><th class="num">Coût IA</th></tr>
+            </thead>
+            <tbody id="clients"></tbody>
+          </table>
+        </div>
+        <p id="noClients" class="muted" hidden>Aucun client pour l'instant.</p>
+        <form id="clientForm" class="admin-row">
+          <input id="clientName" placeholder="Nom de l'entreprise" aria-label="Nom de l'entreprise" maxlength="200" required>
+          <input id="clientEmail" type="email" placeholder="Email de contact (facultatif)" aria-label="Email de contact" maxlength="320">
+          <button type="submit">Ajouter le client</button>
+        </form>
+      </section>
+
+      <section id="detail" class="admin-card" hidden>
+        <div class="admin-head">
+          <h2 id="detailName"></h2>
+          <button id="toggleActive" class="ghost" type="button"></button>
+        </div>
+
+        <div id="newKey" class="admin-newkey" hidden>
+          <p><strong>Copiez cette clé maintenant.</strong> Elle ne sera plus jamais affichée.</p>
+          <div class="admin-row">
+            <code id="newKeyValue"></code>
+            <button id="copyKey" type="button">Copier</button>
+          </div>
+        </div>
+
+        <h3>Clés API</h3>
+        <div class="admin-scroll">
+          <table>
+            <thead><tr><th>Nom</th><th>Clé</th><th>Créée le</th><th>Dernier appel</th><th>État</th><th></th></tr></thead>
+            <tbody id="keys"></tbody>
+          </table>
+        </div>
+        <p id="noKeys" class="muted" hidden>Aucune clé pour ce client.</p>
+        <form id="keyForm" class="admin-row">
+          <input id="keyName" placeholder="Nom de la clé (ex. production)" aria-label="Nom de la clé" maxlength="200" required>
+          <button type="submit">Créer une clé</button>
+        </form>
+
+        <h3>Usage sur 12 mois</h3>
+        <div class="admin-scroll">
+          <table>
+            <thead><tr><th>Mois</th><th class="num">Appels</th><th class="num">Réussis</th><th class="num">Avec IA</th><th class="num">Coût IA</th></tr></thead>
+            <tbody id="usage"></tbody>
+          </table>
+        </div>
+        <p id="noUsage" class="muted" hidden>Aucun appel enregistré.</p>
+      </section>
+    </div>
+  </main>
+  <script src="admin.js"></script>
+</body>
+</html>

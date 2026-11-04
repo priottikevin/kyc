@@ -63,10 +63,17 @@ cd apps/api
 
 1. Nouvelle ressource → **Docker Compose** → ce dépôt, fichier `docker-compose.yml`.
 2. Domaine : sur le service **web** uniquement (l'API reste privée sur le réseau compose).
-3. Variables d'environnement : `API_KEYS` (une clé par projet client), `ANTHROPIC_API_KEY` (+ options de `.env.example`). Redéployer après modification.
-4. Ressources : 2 vCPU / 1,5 Go RAM conseillés. Augmenter `OCR_CONCURRENCY` avec les vCPU.
+3. Base de données : PostgreSQL `kyc-db` dans le même projet Coolify, sur le réseau partagé `coolify` (voir `docker-compose.yml`). Le schéma est créé au démarrage de l'API.
+4. Variables d'environnement : `DATABASE_URL`, `ADMIN_PASSWORD`, `ANTHROPIC_API_KEY` (+ options de `.env.example`). Redéployer après modification.
+5. Ressources : 2 vCPU / 1,5 Go RAM conseillés. Augmenter `OCR_CONCURRENCY` avec les vCPU.
 
 Local avec Docker : `docker compose -f docker-compose.yml -f docker-compose.local.yml up --build` → http://localhost:8080
+
+## Administration
+
+`https://kyc.priotti.fr/admin` (mot de passe : `ADMIN_PASSWORD`) : créer les entreprises clientes, leur générer ou révoquer des clés API sans redéploiement, désactiver un client et suivre ses appels et son coût IA par mois. Une clé n'est affichée qu'à sa création ; la base n'en garde qu'un hash. L'usage enregistré se limite aux métadonnées de l'appel (type de document, statut, durée, coût).
+
+Tests avec base : définir `TEST_DATABASE_URL` vers un PostgreSQL jetable (les tables y sont supprimées), sinon ces tests sont ignorés.
 
 ## Notes
 

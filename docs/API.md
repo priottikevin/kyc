@@ -14,7 +14,7 @@ Un fichier (PDF ou image) en entrée, un JSON en sortie : type de document, cham
 
 ## Authentification
 
-Header `X-API-Key: <clé>` sur `POST /api/extract`. Les clés sont définies côté serveur dans `API_KEYS` (séparées par des virgules) : une clé par projet permet d'en révoquer une sans toucher aux autres. `GET /api/health` et `GET /api/document-types` sont publics.
+Header `X-API-Key: <clé>` sur `POST /api/extract`. Les clés se créent et se révoquent dans l'administration (`/admin`), une ou plusieurs par client. Celles de `API_KEYS` (séparées par des virgules) restent acceptées, sans suivi d'usage. Une erreur `503` signifie que la clé n'a pas pu être vérifiée : réessayer. `GET /api/health` et `GET /api/document-types` sont publics.
 
 Appeler l'API **depuis un serveur**, pas depuis un navigateur : la clé serait visible dans le code client.
 

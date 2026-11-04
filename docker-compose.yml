@@ -1,11 +1,15 @@
 # Coolify: "Docker Compose" build pack, attach your domain to the `web` service only.
-# The API stays private on the compose network; nginx (web) proxies /api to it.
+# The API stays private; nginx (web) proxies /api to it. It alone joins the shared `coolify`
+# network to reach the kyc-db database. That network is shared with other projects, hence the
+# unique service name: a plain `api` could resolve to, or be resolved by, another stack.
 services:
-  api:
+  kyc-api:
     build: ./apps/api
     restart: unless-stopped
     environment:
       - API_KEYS=${API_KEYS:-}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - LLM_MODE=${LLM_MODE:-fallback}
       - LLM_MODEL=${LLM_MODEL:-claude-haiku-5-5}
@@ -18,12 +22,21 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
     expose:
       - "8000"
+    networks:
+      - default
+      - coolify
 
   web:
     build: ./apps/web
     restart: unless-stopped
+    environment:
+      - API_UPSTREAM=kyc-api:8000
     depends_on:
-      api:
+      kyc-api:
         condition: service_healthy
     expose:
       - "80"
+
+networks:
+  coolify:
+    external: true
