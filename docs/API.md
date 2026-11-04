@@ -1,6 +1,6 @@
 # KYC Extract — guide d'intégration
 
-Version du contrat : **1.3.0** · Contrat machine : [`openapi.json`](openapi.json) (servi aussi sur `/api/openapi.json`) · Doc interactive : `/api/docs`
+Version du contrat : **1.4.0** · Contrat machine : [`openapi.json`](openapi.json) (servi aussi sur `/api/openapi.json`) · Doc interactive : `/api/docs`
 
 Production : `https://kyc.priotti.fr`
 
@@ -39,14 +39,14 @@ Appeler l'API **depuis un serveur**, pas depuis un navigateur : la clé serait v
 ### `GET /api/health`
 
 ```json
-{ "status": "ok", "api_version": "1.3.0", "auth": true, "llm": "fallback", "llm_model": "claude-haiku-5-5" }
+{ "status": "ok", "api_version": "1.4.0", "auth": true, "llm": "fallback", "llm_model": "claude-haiku-5-5" }
 ```
 
 ## Réponse
 
 ```json
 {
-  "api_version": "1.3.0",
+  "api_version": "1.4.0",
   "document_type": "id_card",
   "document_label": "Carte nationale d'identité",
   "country": "FRA",
@@ -157,9 +157,9 @@ Les champs **en gras** sont obligatoires (`missing_fields` les liste s'ils manqu
 | `insurance_certificate` | **insurer**, **policy_number**, **holder_name**, **valid_from**, **valid_to** (non exigé sur un « mémo véhicule assuré »), holder_address, plate, vehicle_make, vehicle_model, vehicle_category, insurer_code |
 | `business_card` | **full_name**, job_title, company, emails, phones, websites, address, siren_siret |
 | `kbis` | **company_name**, **siren**, **legal_form**, **head_office_address**, rcs_city, registration_date, share_capital, euid, activity, activity_start_date, management_number, extract_date, legal_representatives |
-| `invoice` | **invoice_number**, **invoice_date**, **total_incl_tax**, due_date, supplier_name, supplier_siret, vat_number, total_excl_tax, total_vat, iban, plate, vin |
+| `invoice` | **invoice_number**, **invoice_date**, **total_incl_tax**, due_date, supplier_name, supplier_siret, vat_number, total_excl_tax, total_vat, iban, plate, vin, customer_name, customer_address |
 | `bank_statement` | **iban**, bic, bank_name, statement_period, statement_date, account_holder, closing_balance |
-| `expert_report` | **report_number**, **claim_number**, report_date, claim_date, policy_number, insurer, expert_name, conclusion, total_excl_tax, total_vat, total_incl_tax, repairer_invoice_number, plate, vin |
+| `expert_report` | **report_number**, **claim_number**, report_date, claim_date, policy_number, insurer, expert_name, conclusion, total_excl_tax, total_vat, total_incl_tax, repairer_invoice_number, plate, vin, insured_name, insured_address |
 | `repair_order` | **order_number**, **plate**, opened_date, work_type, vin, vehicle_make, vehicle_model, customer_name, customer_address, customer_phone, customer_mobile, customer_email, insurer, work_description |
 | `insurance_claim` | **claim_number**, **claim_date**, contract_number, insurer, subject, insurer_reference, liability, plate |
 | `unknown` | Document non reconnu : avec `llm=fallback`, Claude le lit (`document_type` peut alors valoir `other` ou `proof_of_address`). |
@@ -278,5 +278,6 @@ Claude Haiku 5.5 : 0,10 $ par million de jetons en entrée (images comprises), 0
 |---|---|
 | 1.2.0 | `page_rotations` ; `field_positions` sur demande (`include_positions`) |
 | 1.3.0 | `repair_order` : adresse, téléphone, portable et mail du client |
+| 1.4.0 | `invoice` : nom et adresse du client ; `expert_report` : nom et adresse de l'assuré ; `insurance_certificate` : adresse sans libellé sous le souscripteur |
 | 1.1.0 | `field_confidence`, `api_version`, `engine.llm_kind`, `engine.llm_cost_usd` ; 6 nouveaux types (kbis, invoice, bank_statement, expert_report, repair_order, insurance_claim) ; Claude ne relit que les lignes douteuses |
 | 1.0.0 | Version initiale |

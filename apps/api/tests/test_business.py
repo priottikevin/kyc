@@ -119,3 +119,31 @@ def test_repair_order_customer_contact():
     assert ex.fields["customer_phone"] == "01 23 45 67 89"
     assert ex.fields["customer_mobile"] == "06 12 34 56 78"
     assert ex.fields["customer_email"] == "client@exemple.fr"
+
+
+def test_address_blocks_tie_a_column_together():
+    # two columns: the right one is broken up by the rows of the left one
+    lines = [
+        Line("Souscripteur du contrat", 0.95, 500, 0, 700, 25),
+        Line("La garantie du", 0.95, 50, 45, 200, 70),
+        Line("FCBA", 0.95, 500, 45, 560, 70),
+        Line("10 RUE GALILEE", 0.95, 500, 90, 680, 115),
+        Line("77420 CHAMPS SUR MARNE", 0.95, 500, 135, 760, 160),
+        Line("33300 BORDEAUX", 0.95, 50, 135, 240, 160),
+    ]
+    assert Ctx(lines).address_of(r"^FCBA$") == "10 RUE GALILEE, 77420 CHAMPS SUR MARNE"
+
+
+def test_invoice_customer_is_the_block_of_the_recipient():
+    lines = [
+        Line("SARL CARROSSERIE DUPONT", 0.95, 50, 0, 300, 25),
+        Line("Facture N° 26669 / 1 Le 22/05/2026", 0.95, 500, 0, 800, 25),
+        Line("26 RUE DES LILAS", 0.95, 50, 40, 250, 65),
+        Line("33300 BORDEAUX", 0.95, 50, 80, 240, 105),
+        Line("FCBA", 0.95, 800, 200, 860, 225),
+        Line("10 RUE GALILEE", 0.95, 800, 250, 980, 275),
+        Line("77420 CHAMPS SUR MARNE", 0.95, 800, 300, 1060, 325),
+    ]
+    ex = extractors.run("invoice", Ctx(lines))
+    assert ex.fields["customer_name"] == "FCBA"
+    assert ex.fields["customer_address"] == "10 RUE GALILEE, 77420 CHAMPS SUR MARNE"

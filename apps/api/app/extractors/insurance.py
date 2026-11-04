@@ -2,7 +2,7 @@
 
 import re
 
-from ..textutils import DATE_NUM, DATE_VALUE, find_plate, parse_date
+from ..textutils import DATE_NUM, DATE_VALUE, find_plate, norm, parse_date
 from .base import Ctx, Extraction
 
 INSURERS = [
@@ -35,6 +35,8 @@ def extract(ctx: Ctx, doc_type: str) -> Extraction:
     ex.set("holder_name", v(r"SOUSCRIPTEUR|POLICYHOLDER|NOM DE L'ASSURE|TITULAIRE DU CONTRAT", exclude=holder_excl))
     ex.set("holder_name", v(r"\bASSURE\b|TITULAIRE|INSURED", exclude=holder_excl))
     ex.set("holder_address", v(r"ADRESSE", exclude=r"^(N[°O]|DATE|TEL)"))
+    if ex.fields.get("holder_name"):  # no label on the memo cards: the address sits under the name
+        ex.set("holder_address", ctx.address_of(r"^" + re.escape(norm(ex.fields["holder_name"])) + r"$"))
 
     # Validity period: "du 01/01/2025 au 31/12/2025", or labelled dates
     m = re.search(r"\bDU\s+(\d{1,2}[./\- ]\d{1,2}[./\- ]\d{2,4})\s*(?:\S+\s+)?AU\s+(\d{1,2}[./\- ]\d{1,2}[./\- ]\d{2,4})", t)

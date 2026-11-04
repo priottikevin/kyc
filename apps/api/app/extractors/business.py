@@ -114,6 +114,12 @@ def invoice(ctx: Ctx) -> Extraction:
     # supplier = the company in the header (legal form), else the first box of the page
     first = ctx.rows[0][0].text if ctx.rows and ctx.rows[0] else None
     ex.set("supplier_name", next((l.text for r in ctx.rows[:4] for l in r if re.search(LEGAL_FORMS, norm(l.text))), None) or first)
+    # customer = the address block that is not the supplier's: name, then street and postcode
+    supplier = ex.fields.get("supplier_name")
+    customer = next((b for b in ctx.address_blocks() if len(b) >= 3 and supplier not in b), None)
+    if customer:
+        ex.set("customer_name", customer[-3])
+        ex.set("customer_address", ", ".join(customer[-2:]))
     siret = digits_luhn(_search(r"SIRET\s*[:.]?\s*([\d ]{14,20})", t), 14)
     ex.set("supplier_siret", siret)
     if siret:
@@ -180,6 +186,8 @@ def expert_report(ctx: Ctx) -> Extraction:
     ex.set("policy_number", _search(r"N[°O]\s*POLICE[/\w]*\s*[:.]?\s*([A-Z0-9][\w/\-]{3,})", t))
     ex.set("insurer", _search(r"NOM SOCIETE\s*[:.]?\s*([A-Z][\w.\-]+(?: [A-Z][\w.\-]+)?)", t) or _insurer(t))
     ex.set("expert_name", _search(r"\bEXPERT\s*:\s*([A-Z][A-Z\-]+(?: [A-Z][A-Z\-]+){1,3}?)\s+N[°O]", t))
+    ex.set("insured_name", _search(r"^ASSURE\s*:\s*(.+)$", t, flags=re.M))
+    ex.set("insured_address", ctx.address_of(r"^ASSURE\s*:"))
     ex.set("conclusion", _search(r"VEHICULE\s+(?:TECHNIQUEMENT\s+)?((?:ECONOMIQUEMENT\s+|NON\s+)?(?:IR)?REPARABLE)", t))
     _amounts(
         ex,

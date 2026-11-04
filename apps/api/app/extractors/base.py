@@ -93,6 +93,36 @@ class Ctx:
             cur = o
         return ", ".join(parts)
 
+    def address_blocks(self) -> list[list[str]]:
+        """Postal blocks in reading order: the rows of a column above a "75011 PARIS" box, down to that box.
+
+        Addresses are often printed without a label (recipient of a letter) or beside another column, so the
+        column is what ties a name, its street and its postcode together.
+        """
+        blocks = []
+        for last in self.lines:
+            if not re.match(r"\d{5}\s+\S", norm(last.text)):
+                continue
+            rows, cur = [clean_value(last.text)], last
+            for _ in range(3):
+                above = [o for o in self.lines if o is not cur and o.cy < cur.cy - 0.5 * cur.h
+                         and cur.y0 - o.y1 < 2.5 * cur.h and abs(o.x0 - last.x0) < 1.5 * last.h]
+                if not above:
+                    break
+                cur = max(above, key=lambda o: o.y1)
+                rows.insert(0, clean_value(cur.text))
+            if len(rows) > 1:
+                blocks.append(rows)
+        return blocks
+
+    def address_of(self, name: str) -> str | None:
+        """Address printed under a name (regex on normalized text), "street, 75011 PARIS"."""
+        for rows in self.address_blocks():
+            for i, row in enumerate(rows[:-1]):
+                if re.search(name, norm(row)):
+                    return ", ".join(rows[i + 1:])
+        return None
+
     def _locate(self, label: str, value_re: str | None = None, exclude: str | None = None,
                 max_below: float = 2.6) -> tuple[str | None, Line | None]:
         """value_after + the box the value was read from (None when it shares the label's box)."""

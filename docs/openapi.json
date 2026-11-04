@@ -3,7 +3,7 @@
   "info": {
     "title": "KYC Extract API",
     "description": "Extraction de données de documents (identité, véhicule, assurance, entreprise, factures, sinistres).\n\nOCR local d'abord ; Claude n'est appelé que pour relire les valeurs douteuses ou les documents non compris.\nAuthentification : header `X-API-Key`. Aucun fichier n'est conservé.\n\nPour décider automatiquement : accepter si `status` = `verified`, ou `complete` sans champ de\n`field_confidence` au niveau `check`/`unknown` ; sinon faire vérifier les champs signalés.",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "paths": {
     "/api/health": {
@@ -296,7 +296,7 @@
           "api_version": {
             "type": "string",
             "title": "Api Version",
-            "default": "1.3.0"
+            "default": "1.4.0"
           },
           "document_type": {
             "type": "string",
@@ -603,7 +603,7 @@
           "api_version": {
             "type": "string",
             "title": "Api Version",
-            "default": "1.3.0"
+            "default": "1.4.0"
           },
           "auth": {
             "type": "boolean",
