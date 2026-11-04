@@ -1,6 +1,6 @@
 # KYC Extract — guide d'intégration
 
-Version du contrat : **1.1.0** · Contrat machine : [`openapi.json`](openapi.json) (servi aussi sur `/api/openapi.json`) · Doc interactive : `/api/docs`
+Version du contrat : **1.2.0** · Contrat machine : [`openapi.json`](openapi.json) (servi aussi sur `/api/openapi.json`) · Doc interactive : `/api/docs`
 
 Production : `https://kyc.priotti.fr`
 
@@ -28,6 +28,7 @@ Appeler l'API **depuis un serveur**, pas depuis un navigateur : la clé serait v
 | `document_type` | non | Forcer le type (clé de `/api/document-types`). Sinon détection automatique. |
 | `llm` | non | `off` : 100 % local, rien ne quitte le serveur. `fallback` (défaut) : Claude seulement si nécessaire. `always` : Claude relit tout le document. |
 | `include_text` | non | `true` pour recevoir le texte OCR brut dans `text`. |
+| `include_positions` | non | `true` pour recevoir l'emplacement de chaque valeur dans `field_positions` (surligner les valeurs dans une visionneuse). |
 
 ### `GET /api/document-types`
 
@@ -38,14 +39,14 @@ Appeler l'API **depuis un serveur**, pas depuis un navigateur : la clé serait v
 ### `GET /api/health`
 
 ```json
-{ "status": "ok", "api_version": "1.1.0", "auth": true, "llm": "fallback", "llm_model": "claude-haiku-5-5" }
+{ "status": "ok", "api_version": "1.2.0", "auth": true, "llm": "fallback", "llm_model": "claude-haiku-5-5" }
 ```
 
 ## Réponse
 
 ```json
 {
-  "api_version": "1.1.0",
+  "api_version": "1.2.0",
   "document_type": "id_card",
   "document_label": "Carte nationale d'identité",
   "country": "FRA",
@@ -71,9 +72,25 @@ Appeler l'API **depuis un serveur**, pas depuis un navigateur : la clé serait v
     "input": "jpeg", "pages": 1, "ocr_passes": ["tiny"],
     "llm_used": false, "llm_kind": null, "llm_model": null, "llm_usage": null, "llm_cost_usd": null
   },
-  "timings_ms": { "ingest": 7, "ocr_fast": 430, "total": 440 }
+  "timings_ms": { "ingest": 7, "ocr_fast": 430, "total": 440 },
+  "page_rotations": [0],
+  "field_positions": {
+    "surname": { "page": 1, "x": 408, "y": 241, "width": 138, "height": 68 }
+  }
 }
 ```
+
+### `page_rotations` et `field_positions` — situer les valeurs
+
+`page_rotations` (toujours présent) : pour chaque page lue, l'angle (0, 90, 180 ou 270) dont il faut la tourner **dans le sens horaire** pour la lire à l'endroit (photo prise de côté, scan à l'envers).
+
+`field_positions` (avec `include_positions=true`) : pour chaque valeur retrouvée telle qu'imprimée, le rectangle qui l'entoure :
+
+- `page` : 1 pour la première ;
+- `x`, `y` (coin en haut à gauche), `width`, `height` : en **millièmes** de la largeur et de la hauteur de la page ;
+- repère : la page **telle qu'envoyée**, avant toute rotation (image avec son orientation EXIF appliquée, page PDF telle qu'affichée). Pour l'afficher sur la page redressée, appliquer au rectangle la même rotation que `page_rotations`.
+
+Absent pour une valeur reformatée ou déduite (ex. `fuel_label`), une valeur de moins de 3 caractères (sexe, code), ou une valeur lue par Claude qui ne figure pas telle quelle dans le texte OCR. Une valeur sur plusieurs lignes (adresse) reçoit le rectangle qui englobe ses lignes.
 
 ### `status`
 
@@ -259,5 +276,6 @@ Claude Haiku 5.5 : 0,10 $ par million de jetons en entrée (images comprises), 0
 
 | Version | Changements |
 |---|---|
+| 1.2.0 | `page_rotations` ; `field_positions` sur demande (`include_positions`) |
 | 1.1.0 | `field_confidence`, `api_version`, `engine.llm_kind`, `engine.llm_cost_usd` ; 6 nouveaux types (kbis, invoice, bank_statement, expert_report, repair_order, insurance_claim) ; Claude ne relit que les lignes douteuses |
 | 1.0.0 | Version initiale |

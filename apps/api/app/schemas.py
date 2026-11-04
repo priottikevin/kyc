@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-API_VERSION = "1.1.0"
+API_VERSION = "1.2.0"
 
 DocumentType = Literal[
     "id_card", "passport", "residence_permit", "driving_license", "vehicle_registration", "insurance_certificate",
@@ -30,6 +30,14 @@ class FieldConfidence(BaseModel):
         "unknown = valeur non retrouvée telle qu'imprimée (reformatée ou déduite). "
         "À faire vérifier par un humain : check et unknown."
     )
+
+
+class FieldPosition(BaseModel):
+    page: int = Field(description="Numéro de page (1 = première)")
+    x: int = Field(description="Bord gauche, en millièmes de la largeur de la page")
+    y: int = Field(description="Bord haut, en millièmes de la hauteur de la page")
+    width: int = Field(description="Largeur, en millièmes de la largeur de la page")
+    height: int = Field(description="Hauteur, en millièmes de la hauteur de la page")
 
 
 class Mrz(BaseModel):
@@ -96,6 +104,15 @@ class ExtractResponse(BaseModel):
     engine: Engine
     timings_ms: dict[str, int]
     text: str | None = Field(None, description="Texte OCR brut (si include_text=true)")
+    page_rotations: list[int] = Field(
+        default_factory=list,
+        description="Par page, angle (0, 90, 180, 270) dont il faut la tourner dans le sens horaire pour la lire à l'endroit",
+    )
+    field_positions: dict[str, FieldPosition] | None = Field(
+        None,
+        description="Si include_positions=true : emplacement de chaque valeur retrouvée telle qu'imprimée, dans la page "
+        "telle qu'envoyée (avant rotation), origine en haut à gauche. Absent pour une valeur reformatée ou déduite.",
+    )
 
 
 class Health(BaseModel):

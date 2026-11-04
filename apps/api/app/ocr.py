@@ -114,10 +114,11 @@ def run_ocr(engine, img: np.ndarray) -> list[Line]:
     return out
 
 
-def ocr_page(engine, img: np.ndarray) -> tuple[list[Line], np.ndarray]:
+def ocr_page(engine, img: np.ndarray) -> tuple[list[Line], np.ndarray, int]:
     """OCR with a cheap whole-page orientation check (photos taken sideways / upside down).
 
-    Returns the lines and the image they refer to (rotated if needed).
+    Returns the lines, the image they refer to (rotated if needed) and that rotation in degrees clockwise
+    (0, 90, 180, 270): the angle by which the page must be turned to read it upright.
     """
     import cv2
 
@@ -125,16 +126,16 @@ def ocr_page(engine, img: np.ndarray) -> tuple[list[Line], np.ndarray]:
     vertical = sum(1 for l in lines if l.h > 1.5 * l.w and len(l.text) > 2)
     low = _score(lines)
     if lines and vertical <= len(lines) * 0.4 and np.mean([l.conf for l in lines]) > 0.8:
-        return lines, img
+        return lines, img, 0
     # Try alternatives only when the first pass looks wrong
-    candidates = [(low, lines, img)]
-    rots = [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE] if vertical > len(lines) * 0.4 else [cv2.ROTATE_180]
-    for r in rots:
+    candidates = [(low, lines, img, 0)]
+    rots = [(cv2.ROTATE_90_CLOCKWISE, 90), (cv2.ROTATE_90_COUNTERCLOCKWISE, 270)] if vertical > len(lines) * 0.4 else [(cv2.ROTATE_180, 180)]
+    for r, deg in rots:
         rimg = cv2.rotate(img, r)
         alt = run_ocr(engine, rimg)
-        candidates.append((_score(alt), alt, rimg))
+        candidates.append((_score(alt), alt, rimg, deg))
     best = max(candidates, key=lambda c: c[0])
-    return best[1], best[2]
+    return best[1], best[2], best[3]
 
 
 def line_crop(img: np.ndarray, ln: Line, y_off: float = 0.0, others: list[Line] | None = None) -> np.ndarray | None:

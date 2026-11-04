@@ -13,6 +13,7 @@ from .config import Settings
 from .extractors import Ctx, Extraction
 from .llm import LlmClient, LlmError
 from .ocr import Line, OcrEngines, line_crop, native_to_lines, ocr_page, reread_line
+from .positions import PageGeo, field_positions
 from .textutils import entities, norm
 
 log = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class Options:
     document_type: str | None = None
     llm: str | None = None  # None = server default; "off" | "fallback" | "always"
     include_text: bool = False
+    include_positions: bool = False
 
 
 class Pipeline:
@@ -53,27 +55,37 @@ class Pipeline:
 
     # ------------------------------------------------------------------ OCR
 
-    def _ocr_pages(self, pages: list[ingest.Page], size: str) -> tuple[list[Line], list[tuple]]:
+    def _ocr_pages(self, pages: list[ingest.Page], size: str) -> tuple[list[Line], list[tuple], list[PageGeo]]:
         """OCR all pages; stack them vertically so layout helpers keep working across pages.
 
-        Also returns, per OCR'd page, (image the boxes refer to, y offset, y end) for targeted re-reads.
+        Also returns, per OCR'd page, (image the boxes refer to, y offset, y end) for targeted re-reads,
+        and the geometry of every page to map boxes back to the page as provided.
         """
         out: list[Line] = []
         views: list[tuple] = []
+        geo: list[PageGeo] = []
         y_off = 0.0
-        for p in pages:
+        for n, p in enumerate(pages, 1):
+            start = y_off
             if p.is_native:
                 lines = native_to_lines(p.native_lines)
+                g = PageGeo(n, start, 0, 0, p.width, p.height, (0, 0), p.width, p.height)
             else:
-                lines, img = ocr_page(self.engines.get(size), p.image)
+                lines, img, rotation = ocr_page(self.engines.get(size), p.image)
                 views.append((img, y_off, y_off + img.shape[0]))
+                h, w = p.image.shape[:2]
+                g = PageGeo(n, start, 0, rotation, w, h, p.offset, p.width, p.height)
             for ln in lines:
                 out.append(Line(ln.text, ln.conf, ln.x0, ln.y0 + y_off, ln.x1, ln.y1 + y_off, ln.chars))
             if lines:
                 y_off = max(l.y1 for l in out) + 200
-        return out, views
+            geo.append(g)
+        # a page's lines end before the next page starts (stacking leaves a gap after the last line)
+        for g, nxt in zip(geo, geo[1:] + [None]):
+            g.y_end = nxt.y_start if nxt else float("inf")
+        return out, views, geo
 
-    async def _ocr(self, pages, size) -> tuple[list[Line], list[tuple]]:
+    async def _ocr(self, pages, size) -> tuple[list[Line], list[tuple], list[PageGeo]]:
         async with self.sem:
             return await asyncio.to_thread(self._ocr_pages, pages, size)
 
@@ -170,7 +182,7 @@ class Pipeline:
         forced = opts.document_type if opts.document_type in TYPES and opts.document_type != "unknown" else None
 
         passes = []
-        lines, views = await self._ocr(pages, self.s.ocr_fast_model)
+        lines, views, geo = await self._ocr(pages, self.s.ocr_fast_model)
         passes.append("native" if not has_images else self.s.ocr_fast_model)
         ctx, ex, scores = self._analyse(lines, forced)
         t = lap("ocr_fast", t)
@@ -183,12 +195,12 @@ class Pipeline:
         dense = len(lines) > DENSE_LINES or ex.document_type in BUSINESS_TYPES
         if (not ex.complete and has_images and self.s.ocr_accurate_model != "none" and not dense
                 and not (ex.llm_preferred and llm_ready)):
-            lines2, views2 = await self._ocr(pages, self.s.ocr_accurate_model)
+            lines2, views2, geo2 = await self._ocr(pages, self.s.ocr_accurate_model)
             ctx2, ex2, scores2 = self._analyse(lines2, forced)
             passes.append(self.s.ocr_accurate_model)
             if ex2.rank() > ex.rank():
                 ctx, ex, scores = ctx2, ex2, scores2
-                lines, views, from_fast = lines2, views2, False
+                lines, views, geo, from_fast = lines2, views2, geo2, False
             t = lap("ocr_accurate", t)
 
         if (from_fast and views and self.s.ocr_accurate_model != "none"
@@ -315,7 +327,10 @@ class Pipeline:
                 "classification_scores": {k: v for k, v in scores.items() if v},
             },
             "timings_ms": timings,
+            "page_rotations": [g.rotation for g in geo],
         }
+        if opts.include_positions:
+            out["field_positions"] = field_positions(fields, lines, geo)
         if ex.extra:
             out.update(ex.extra)
         if opts.include_text:

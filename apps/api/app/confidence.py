@@ -32,6 +32,7 @@ class CharIndex:
 
     def __init__(self, lines: list[Line]):
         self.rows: list[tuple[str, list[float]]] = []
+        self.mrz: list[bool] = [ln.text.count("<") >= 3 for ln in lines]
         for ln in lines:
             chars, confs = [], []
             scores = ln.chars if ln.chars and len(ln.chars) == len(ln.text) else [ln.conf] * len(ln.text)

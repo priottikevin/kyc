@@ -86,6 +86,7 @@ async def extract(
     document_type: Annotated[str | None, Form(description="Forcer le type (clé de /api/document-types), sinon détection auto")] = None,
     llm: Annotated[str | None, Form(description="off = 100 % local ; fallback (défaut) = LLM seulement si nécessaire ; always")] = None,
     include_text: Annotated[bool, Form(description="Renvoyer le texte OCR brut dans `text`")] = False,
+    include_positions: Annotated[bool, Form(description="Renvoyer l'emplacement de chaque valeur dans `field_positions`")] = False,
 ):
     max_bytes = settings.max_upload_mb * 1024 * 1024
     data = await file.read(max_bytes + 1)
@@ -96,7 +97,8 @@ async def extract(
     if llm not in (None, "", "off", "fallback", "always"):
         raise HTTPException(422, "llm doit valoir off, fallback ou always")
     try:
-        return await state["pipeline"].process(data, Options(document_type=document_type or None, llm=llm or None, include_text=include_text))
+        return await state["pipeline"].process(data, Options(document_type=document_type or None, llm=llm or None,
+                                                            include_text=include_text, include_positions=include_positions))
     except UnsupportedFile as e:
         raise HTTPException(415, str(e)) from e
 

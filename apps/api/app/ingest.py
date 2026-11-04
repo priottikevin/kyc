@@ -15,6 +15,11 @@ class UnsupportedFile(ValueError):
 class Page:
     image: np.ndarray | None = None  # BGR
     native_lines: list[tuple[str, tuple[float, float, float, float]]] = field(default_factory=list)
+    # the page as provided (image after EXIF orientation / PDF page), in the unit of `image` or of `native_lines`:
+    # positions are returned relative to it, whatever was trimmed, scaled or rotated for the OCR
+    width: float = 0.0
+    height: float = 0.0
+    offset: tuple[int, int] = (0, 0)  # top-left corner of `image` in that frame (blank margins trimmed)
 
     @property
     def is_native(self) -> bool:
@@ -53,6 +58,11 @@ def trim_margins(img: np.ndarray, thresh: int = 225, pad_ratio: float = 0.02) ->
 
     Less pixels for the detector = faster OCR. Photos with a non-white background are left untouched.
     """
+    return trim_margins_at(img, thresh, pad_ratio)[0]
+
+
+def trim_margins_at(img: np.ndarray, thresh: int = 225, pad_ratio: float = 0.02) -> tuple[np.ndarray, tuple[int, int]]:
+    """trim_margins, plus the (x, y) of the kept area in the original image."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
     ink = (gray < thresh).astype(np.uint8)
     h, w = ink.shape
@@ -60,13 +70,13 @@ def trim_margins(img: np.ndarray, thresh: int = 225, pad_ratio: float = 0.02) ->
     rows = np.where(ink.sum(axis=1) > max(3, 0.01 * w))[0]
     cols = np.where(ink.sum(axis=0) > max(3, 0.01 * h))[0]
     if rows.size == 0 or cols.size == 0:
-        return img
+        return img, (0, 0)
     pad = int(pad_ratio * max(h, w))
     y0, y1 = max(0, rows[0] - pad), min(h, rows[-1] + 1 + pad)
     x0, x1 = max(0, cols[0] - pad), min(w, cols[-1] + 1 + pad)
     if (y1 - y0) * (x1 - x0) > 0.8 * h * w:
-        return img
-    return img[y0:y1, x0:x1].copy()
+        return img, (0, 0)
+    return img[y0:y1, x0:x1].copy(), (int(x0), int(y0))
 
 
 def load(data: bytes, max_pages: int, max_side: int) -> tuple[str, list[Page]]:
@@ -79,7 +89,12 @@ def load(data: bytes, max_pages: int, max_side: int) -> tuple[str, list[Page]]:
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise UnsupportedFile("Image illisible")
-    return kind, [Page(image=trim_margins(downscale(img, max_side)))]
+    return kind, [_image_page(downscale(img, max_side))]
+
+
+def _image_page(img: np.ndarray) -> Page:
+    trimmed, offset = trim_margins_at(img)
+    return Page(image=trimmed, width=img.shape[1], height=img.shape[0], offset=offset)
 
 
 def _load_pdf(data: bytes, max_pages: int, max_side: int) -> list[Page]:
@@ -92,14 +107,14 @@ def _load_pdf(data: bytes, max_pages: int, max_side: int) -> list[Page]:
         for page in list(doc)[:max_pages]:
             lines = _native_lines(page)
             if sum(len(t) for t, _ in lines) >= 80:
-                pages.append(Page(native_lines=lines))
+                pages.append(Page(native_lines=lines, width=page.rect.width, height=page.rect.height))
                 continue
             # Scanned page: render so the long side is ~max_side px
             r = page.rect
             zoom = min(max_side / max(r.width, r.height), 4.0)
             pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), colorspace=fitz.csRGB, alpha=False)
             img = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, 3)
-            pages.append(Page(image=trim_margins(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))))
+            pages.append(_image_page(cv2.cvtColor(img, cv2.COLOR_RGB2BGR)))
     if not pages:
         raise UnsupportedFile("PDF vide")
     return pages

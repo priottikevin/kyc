@@ -3,7 +3,7 @@
   "info": {
     "title": "KYC Extract API",
     "description": "Extraction de données de documents (identité, véhicule, assurance, entreprise, factures, sinistres).\n\nOCR local d'abord ; Claude n'est appelé que pour relire les valeurs douteuses ou les documents non compris.\nAuthentification : header `X-API-Key`. Aucun fichier n'est conservé.\n\nPour décider automatiquement : accepter si `status` = `verified`, ou `complete` sans champ de\n`field_confidence` au niveau `check`/`unknown` ; sinon faire vérifier les champs signalés.",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "paths": {
     "/api/health": {
@@ -165,6 +165,12 @@
             "title": "Include Text",
             "description": "Renvoyer le texte OCR brut dans `text`",
             "default": false
+          },
+          "include_positions": {
+            "type": "boolean",
+            "title": "Include Positions",
+            "description": "Renvoyer l'emplacement de chaque valeur dans `field_positions`",
+            "default": false
           }
         },
         "type": "object",
@@ -280,7 +286,7 @@
           "api_version": {
             "type": "string",
             "title": "Api Version",
-            "default": "1.1.0"
+            "default": "1.2.0"
           },
           "document_type": {
             "type": "string",
@@ -412,6 +418,29 @@
             ],
             "title": "Text",
             "description": "Texte OCR brut (si include_text=true)"
+          },
+          "page_rotations": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Page Rotations",
+            "description": "Par page, angle (0, 90, 180, 270) dont il faut la tourner dans le sens horaire pour la lire à l'endroit"
+          },
+          "field_positions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/FieldPosition"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Positions",
+            "description": "Si include_positions=true : emplacement de chaque valeur retrouvée telle qu'imprimée, dans la page telle qu'envoyée (avant rotation), origine en haut à gauche. Absent pour une valeur reformatée ou déduite."
           }
         },
         "type": "object",
@@ -513,6 +542,44 @@
         ],
         "title": "FieldConfidence"
       },
+      "FieldPosition": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Numéro de page (1 = première)"
+          },
+          "x": {
+            "type": "integer",
+            "title": "X",
+            "description": "Bord gauche, en millièmes de la largeur de la page"
+          },
+          "y": {
+            "type": "integer",
+            "title": "Y",
+            "description": "Bord haut, en millièmes de la hauteur de la page"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width",
+            "description": "Largeur, en millièmes de la largeur de la page"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height",
+            "description": "Hauteur, en millièmes de la hauteur de la page"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "FieldPosition"
+      },
       "Health": {
         "properties": {
           "status": {
@@ -526,7 +593,7 @@
           "api_version": {
             "type": "string",
             "title": "Api Version",
-            "default": "1.1.0"
+            "default": "1.2.0"
           },
           "auth": {
             "type": "boolean",
